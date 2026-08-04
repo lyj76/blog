@@ -150,3 +150,126 @@
     }
   }
 }
+
+/* ===== Reading mode ===== */
+
+/* reading-mode controls are always rendered, hidden outside reading mode */
+body:not(.reading-mode) #reading-sidebar-header,
+body:not(.reading-mode) #reading-sidebar-expand {
+	display: none;
+}
+
+/* sidebar leaves the grid flow on lg (position: fixed), so collapse to a single column */
+.reading-mode #main-grid {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.reading-mode #post-container {
+	max-width: var(--reading-content-width);
+	margin-inline: auto;
+}
+
+.reading-mode .profile-wrap {
+	display: none;
+}
+
+/* sticky panel header: stays visible while the panel scrolls */
+#reading-sidebar-header {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: 0.75rem 0.75rem 0.625rem;
+	margin-bottom: 0.625rem;
+	background: color-mix(in oklab, var(--card-bg) 92%, transparent);
+	backdrop-filter: blur(8px);
+	border-bottom: 1px solid color-mix(in oklab, var(--btn-regular-bg) 55%, transparent);
+}
+
+@media (min-width: 1024px) {
+	.reading-mode #sidebar {
+		position: fixed;
+		top: 4.5rem;
+		left: 1rem;
+		z-index: 40;
+		width: min(17.5rem, calc(100vw - 2rem));
+		max-height: calc(100vh - 5.5rem);
+		overflow-y: auto;
+		overflow-x: hidden;
+		padding: 0;
+		border-radius: var(--radius-large);
+		background: color-mix(in oklab, var(--card-bg) 62%, transparent);
+		backdrop-filter: blur(10px);
+		box-shadow: 0 10px 30px rgb(0 0 0 / 0.08);
+		transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+		/* .onload-animation's forwards fill would override the collapse transform/opacity */
+		animation: none;
+		opacity: 1;
+		/* themed thin scrollbar instead of the native one */
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in oklab, var(--btn-regular-bg) 75%, transparent) transparent;
+	}
+	.reading-mode #sidebar::-webkit-scrollbar {
+		width: 6px;
+	}
+	.reading-mode #sidebar::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.reading-mode #sidebar::-webkit-scrollbar-thumb {
+		background: color-mix(in oklab, var(--btn-regular-bg) 75%, transparent);
+		border-radius: 3px;
+	}
+
+	.reading-mode #sidebar-sticky {
+		position: static;
+		padding: 0 0.75rem 0.75rem;
+	}
+
+	.reading-mode.reading-sidebar-collapsed #sidebar {
+		transform: translateX(calc(-100% - 2rem));
+		opacity: 0;
+		pointer-events: none;
+	}
+}
+
+/* cards stagger in when the panel expands */
+.reading-mode #sidebar-sticky > * {
+	/* .onload-animation's forwards fill would override the stagger opacity/transform */
+	animation: none;
+	transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reading-mode.reading-sidebar-collapsed #sidebar-sticky > * {
+	opacity: 0;
+	transform: translateX(-1rem);
+}
+.reading-mode:not(.reading-sidebar-collapsed) #sidebar-sticky > * {
+	opacity: 1;
+	transform: none;
+}
+.reading-mode:not(.reading-sidebar-collapsed) #sidebar-sticky > :nth-child(1) { transition-delay: 60ms; }
+.reading-mode:not(.reading-sidebar-collapsed) #sidebar-sticky > :nth-child(2) { transition-delay: 120ms; }
+.reading-mode:not(.reading-sidebar-collapsed) #sidebar-sticky > :nth-child(3) { transition-delay: 180ms; }
+
+/* floating expand button, appears where the panel was when collapsed */
+#reading-sidebar-expand {
+	position: fixed;
+	top: 4.5rem;
+	left: 1rem;
+	z-index: 40;
+	opacity: 0;
+	transform: translateX(-0.75rem) scale(0.8);
+	pointer-events: none;
+	transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reading-sidebar-collapsed #reading-sidebar-expand {
+	opacity: 1;
+	transform: none;
+	pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.reading-mode #sidebar,
+	.reading-mode #sidebar-sticky > *,
+	#reading-sidebar-expand {
+		transition: none;
+	}
+}

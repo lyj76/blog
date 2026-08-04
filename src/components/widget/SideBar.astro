@@ -1,5 +1,6 @@
 ---
 import type { MarkdownHeading } from "astro";
+import { Icon } from "astro-icon/components";
 import Categories from "./Categories.astro";
 import DirectoryTree from "./DirectoryTree.astro";
 import Profile from "./Profile.astro";
@@ -13,7 +14,18 @@ interface Props {
 const className = Astro.props.class;
 ---
 <div id="sidebar" class:list={[className, "w-full"]}>
-    <div class="flex flex-col w-full gap-4 mb-4">
+    <div id="reading-sidebar-header" class="flex items-center justify-between">
+        <span class="flex items-center gap-2 text-sm font-medium text-black/50 dark:text-white/50">
+            <Icon name="fa6-solid:book-open" class="text-sm"></Icon>
+            <span>目录</span>
+        </span>
+        <button id="reading-sidebar-toggle" aria-label="Collapse sidebar"
+                class="btn-plain rounded-lg h-8 w-8 text-black/50 dark:text-white/50"
+                title="收起侧栏">
+            <Icon name="fa6-solid:angles-left" class="text-sm"></Icon>
+        </button>
+    </div>
+    <div class="profile-wrap flex flex-col w-full gap-4 mb-4">
         <Profile></Profile>
     </div>
     <div id="sidebar-sticky" class="transition-all duration-700 flex flex-col w-full gap-4 top-4 sticky top-4">
@@ -22,4 +34,8 @@ const className = Astro.props.class;
         <Tag class="onload-animation" style="animation-delay: 250ms"></Tag>
     </div>
 </div>
-
+<button id="reading-sidebar-expand" aria-label="Expand sidebar"
+        class="btn-card rounded-xl h-10 w-10 text-black/60 dark:text-white/60"
+        title="展开侧栏">
+    <Icon name="fa6-solid:angles-right" class="text-base"></Icon>
+</button>
