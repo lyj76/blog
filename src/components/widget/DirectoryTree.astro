@@ -1,0 +1,26 @@
+---
+import { getDirectoryTree } from "@utils/tree-utils";
+import DirectoryTreeNode from "./DirectoryTreeNode.svelte";
+import WidgetLayout from "./WidgetLayout.astro";
+
+interface Props {
+	class?: string;
+	style?: string;
+}
+
+const className = Astro.props.class;
+const style = Astro.props.style;
+
+const tree = await getDirectoryTree();
+const currentPath = Astro.url.pathname;
+---
+
+{tree.length > 0 && (
+    <WidgetLayout name="笔记目录" id="directory-tree" class={className} style={style}>
+        <div class="flex flex-col py-1">
+            {tree.map((node) => (
+                <DirectoryTreeNode client:load node={node} currentPath={currentPath} level={0} />
+            ))}
+        </div>
+    </WidgetLayout>
+)}

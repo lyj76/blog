@@ -1,0 +1,64 @@
+---
+import { Icon } from "astro-icon/components";
+import { url } from "@utils/url-utils";
+
+interface Props {
+	id: string; // e.g. "计算机基础/操作系统/内存管理.md"
+	title: string;
+	class?: string;
+}
+
+const { id, title, class: className } = Astro.props;
+
+const normalizedId = id.replace(/\\/g, "/");
+const parts = normalizedId.split("/");
+const dirParts = parts.slice(0, -1);
+
+// Build breadcrumb items
+const breadcrumbs = [
+	{ name: "首页", url: url("/"), icon: "material-symbols:home-outline-rounded" },
+];
+
+let accumulatedPath = "";
+for (const dir of dirParts) {
+	accumulatedPath = accumulatedPath ? `${accumulatedPath}/${dir}` : dir;
+	breadcrumbs.push({
+		name: dir,
+		url: url(`/archive/?category=${encodeURIComponent(dir)}`),
+		icon: "material-symbols:folder-outline-rounded",
+	});
+}
+
+breadcrumbs.push({
+	name: title,
+	url: "",
+	icon: "material-symbols:description-outline-rounded",
+});
+---
+
+<nav aria-label="Breadcrumb" class:list={["flex items-center flex-wrap gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 mb-3 onload-animation", className]}>
+    {breadcrumbs.map((item, index) => {
+        const isLast = index === breadcrumbs.length - 1;
+        return (
+            <div class="flex items-center gap-1.5">
+                {index > 0 && (
+                    <Icon name="material-symbols:chevron-right-rounded" class="text-sm text-neutral-400 dark:text-neutral-600 shrink-0" />
+                )}
+                {isLast ? (
+                    <span class="flex items-center gap-1 font-medium text-neutral-800 dark:text-neutral-200 truncate max-w-[200px] md:max-w-[300px]">
+                        <Icon name={item.icon} class="text-sm text-[var(--primary)] shrink-0" />
+                        <span class="truncate">{item.name}</span>
+                    </span>
+                ) : (
+                    <a
+                        href={item.url}
+                        class="flex items-center gap-1 hover:text-[var(--primary)] transition-colors duration-150 truncate max-w-[150px]"
+                    >
+                        <Icon name={item.icon} class="text-sm shrink-0" />
+                        <span class="truncate">{item.name}</span>
+                    </a>
+                )}
+            </div>
+        );
+    })}
+</nav>
