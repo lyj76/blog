@@ -77,6 +77,40 @@ corepack pnpm build                       # 产出 dist/
 - `astro.config.mjs` 里的 `site` 字段记得改成你的正式域名。
 - `vercel.json` 已存在，Vercel 可零配置部署。
 
+### 方式 C：Cloudflare Pages（推荐）
+
+本项目是纯静态站，Cloudflare Pages 足够（**不需要 Workers**）。
+
+**1. 推送到 GitHub 后，Git 集成自动部署（推荐）：**
+
+1. Cloudflare 控制台 → **Workers & Pages** → **Create** → **Pages** → **Connect to Git** → 授权 GitHub → 选择仓库。
+2. 构建设置：
+   - Framework preset：**Astro**
+   - Build command：`pnpm run build`（框架预设已自动填 `astro build`，改成含 pagefind 的完整命令）
+   - Build output directory：`dist`
+   - 环境变量：新增 `NODE_VERSION=22`（显式指定 Node 版本，避免默认版本过旧）
+3. 点击 **Save and Deploy**，等待构建完成，访问 `https://<项目名>.pages.dev`。
+4. 以后 `git push` 自动触发重新构建部署。
+
+**2. 或使用 Wrangler CLI（手动上传 dist）：**
+
+```bash
+npm install -g wrangler        # 一次性安装
+pnpm run build                 # 本地构建出 dist/
+npx wrangler pages project create fuwari-blog
+npx wrangler pages deploy dist --project-name fuwari-blog
+```
+
+**3. 自定义域名（可选）：**
+
+Pages → 项目 → **Custom domains** → Add custom domain。域名 DNS 已托管在 Cloudflare 的话可一键接入。
+
+**4. 部署后检查：**
+
+- ✅ `site` 字段：`astro.config.mjs` 里改成你的正式域名（影响 RSS / sitemap 链接）
+- ✅ 站内搜索（pagefind）：构建命令已含 `pagefind --site dist`，CF 构建环境可正常运行
+- ✅ `vercel.json` 对 CF 无影响，可忽略
+
 ## 四、部署前的自检清单
 
 1. ✅ 停掉本地 dev 服务器后运行 `corepack pnpm build`，确认 `dist/` 非空。
