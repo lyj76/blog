@@ -29,3 +29,7 @@ yarn.lock
 # ide
 .idea
 *.iml
+
+# WSL symlink to ext4 node_modules (never commit)
+node_modules
+.sisyphus/

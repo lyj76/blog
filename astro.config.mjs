@@ -6,6 +6,8 @@ import { pluginLineNumbers } from "@expressive-code/plugin-line-numbers";
 import swup from "@swup/astro";
 import expressiveCode from "astro-expressive-code";
 import icon from "astro-icon";
+import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 import { defineConfig } from "astro/config";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeComponents from "rehype-components"; /* Render the custom directive content */
@@ -49,7 +51,6 @@ export default defineConfig({
 		}),
 		icon({
 			include: {
-				"preprocess: vitePreprocess(),": ["*"],
 				"fa6-brands": ["*"],
 				"fa6-regular": ["*"],
 				"fa6-solid": ["*"],
@@ -154,6 +155,17 @@ export default defineConfig({
 		],
 	},
 	vite: {
+		server: {
+			fs: {
+				// node_modules 是符号链接到 ext4（/root/fuwari-node_modules），
+				// 其 realpath 在项目根之外，需加入允许列表否则字体/资源请求被 Vite 拦截。
+				// 注意：自定义 allow 会替换默认列表（默认含项目根），所以必须把项目根也加回来。
+				allow: [
+					fileURLToPath(new URL(".", import.meta.url)),
+					realpathSync(new URL("./node_modules", import.meta.url)),
+				],
+			},
+		},
 		build: {
 			rollupOptions: {
 				onwarn(warning, warn) {
