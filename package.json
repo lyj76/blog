@@ -75,6 +75,11 @@
   "packageManager": "pnpm@9.14.4",
   "pnpm": {
     "packageExtensions": {
+      "@astrojs/rss": {
+        "peerDependencies": {
+          "astro": "^5.0.0"
+        }
+      },
       "@swup/astro": {
         "peerDependencies": {
           "astro": "^5.0.0"
