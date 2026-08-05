@@ -78,6 +78,43 @@ def __getitem__(self, idx):
 - 字典更自解释：不用记 `batch[0]` 到底是输入还是标签，直接按名字取
 - 规则只有一条：**返回什么由你定，DataLoader 按 `batch_size` 收集 N 个样本，再堆叠成批次**——元组按位置堆叠，字典按键堆叠，堆叠后第 0 维永远是 batch 大小
 
+### DataLoader 是怎么"统一"堆叠的：结构递归
+
+为什么同一个 DataLoader 能不加区分地处理元组和字典？因为它不关心你的样本是什么语义，只关心**结构**，然后**递归**处理（简化版）：
+
+```python title="collate-recursion.py"
+def default_collate(batch):           # batch = [样本0, 样本1, ..., 样本N-1]
+    elem = batch[0]                    # 只看第一个样本的结构
+
+    if isinstance(elem, dict):         # 字典 → 按键分组，递归
+        return {key: default_collate([d[key] for d in batch]) for key in elem}
+    elif isinstance(elem, tuple):      # 元组 → 按位置分组，递归
+        return tuple(default_collate(s) for s in zip(*batch))
+    elif isinstance(elem, torch.Tensor):  # 张量 → 叶子，直接堆叠
+        return torch.stack(batch)
+```
+
+用数字走一遍（`batch_size=2`，样本是 `(x, y)` 元组）：
+
+```python title="stack-walkthrough.py"
+x0, y0 = torch.tensor([1, 2, 3]), torch.tensor([0])   # 样本 0
+x1, y1 = torch.tensor([4, 5, 6]), torch.tensor([1])   # 样本 1
+
+batch = (torch.stack([x0, x1]), torch.stack([y0, y1]))
+#        └──────── 位置 0 分组 ────────┘  └─ 位置 1 分组 ─┘
+# batch = (tensor([[1,2,3],[4,5,6]]), tensor([0,1]))   形状 [2,3] 和 [2]
+```
+
+字典形式则是按键分组：所有 `"input_ids"` 叠一起、所有 `"labels"` 叠一起，`torch.stack` 在**最前面插一个新维度**，所以第 0 维永远是 batch 大小。
+
+::::note
+**背后的两个抽象（通用知识）**：
+1. **对象协议统一访问方式**：`tuple[0]` 和 `dict["input_ids"]` 走的是同一个 `__getitem__` 协议（key 只是类型不同），通用代码不需要知道结构细节
+2. **结构递归**：按容器类型分组 → 逐槽位递归 → 叶子堆叠，任意嵌套结构一份代码处理
+
+这套"按类型分组 + 递归 + 叶子操作"的模式，`pickle`、`copy.deepcopy`、JSON 序列化全在用。**写任何"把 N 个结构合成一个"的代码时，直接套这个模板**。
+::::
+
 ## 3. DataLoader：批量加载器
 
 ```python title="dataloader-basic.py"
