@@ -86,6 +86,18 @@ y2 = model.forward(x)    # 不推荐：跳过钩子
 | `.state_dict()` | 返回 `_parameters` 与缓冲区（buffer）的键值快照，用于保存与加载 |
 | `.device` | ⚠️ 没有这个属性；设备信息要通过参数的 `.device` 获取 |
 
+**按参数重建线性层**（LoRA 合并权重时常用）：用已有层的维度/设备/精度创建同构新层：
+
+```python title="recreate-linear.py"
+new_linear = nn.Linear(
+    in_features=orig_linear.in_features,       # 输入维度保持一致
+    out_features=orig_linear.out_features,     # 输出维度保持一致
+    bias=orig_linear.bias is not None,         # 是否带偏置
+    device=W0.device,                          # 设备一致（cuda/cpu）
+    dtype=W0.dtype                             # 精度一致（float32 / bfloat16）
+)
+```
+
 ## 4. 几个重要的迭代器
 
 `nn.Module` 提供了一整套「树形遍历」迭代器，按粒度从大到小：
@@ -117,6 +129,23 @@ for name, param in model.named_parameters():
 ::::tip
 **遍历范围的区别**：`modules()` 遍历的是「模块」（`nn.Module` 实例，包含容器层），`parameters()` 遍历的是「参数」（`nn.Parameter` 实例，只含真正的权重）。前者偏结构、后者偏数值。
 ::::
+
+### get_submodule() —— 按属性路径获取子模块
+
+`model.get_submodule("block.0.linear")` 按**点分路径**取子模块，是遍历与修改模型结构的常用工具（替换层时先拿父模块）：
+
+```python title="get-submodule-example.py"
+# 模型结构: model -> encoder.layers.0.self_attn.q_proj
+parent = model.get_submodule("encoder.layers.0.self_attn")  # 拿到父模块
+child  = model.get_submodule("encoder.layers.0.self_attn.q_proj")  # 拿到子模块
+```
+
+配合 `setattr` 可以实现「替换子模块」（LoRA 注入的核心操作）：
+
+```python title="replace-submodule.py"
+parent = model.get_submodule(parent_name)
+setattr(parent, child_name, new_layer)   # 用 new_layer 替换掉旧的子模块
+```
 
 ### state_dict() —— 保存与加载
 

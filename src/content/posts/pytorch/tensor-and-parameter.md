@@ -111,7 +111,44 @@ result = A @ B @ C        # 形状 [2, 5]
 | 求和 | `A.sum()` |
 | 展平 | `A.flatten()` / `A.view(-1)` |
 
-## 5. 创建张量
+## 5. 数据操作：detach 与 copy_
+
+### detach() —— 切断计算图，取出纯数据
+
+`A.detach()` 返回一个**共享底层数据、但脱离计算图**的新张量：
+
+```python title="detach-example.py"
+W0 = orig_linear.weight.detach()   # 拿到权重数据，不再追踪梯度
+```
+
+| 特性 | `A` | `A.detach()` |
+| --- | --- | --- |
+| 底层数据 | 共享同一份内存 | 共享同一份内存 |
+| `requires_grad` | 可能为 `True` | 恒为 `False` |
+| 参与反向传播 | 是 | 否（数据操作、合并权重、导出时用） |
+
+::::note
+**为什么需要 detach**：合并 LoRA 权重、保存模型、做纯数值运算时，我们不希望这些操作被记进计算图（既浪费内存，也可能污染梯度）。`detach()` 把「数据」从「梯度追踪」里剥出来。
+::::
+
+### copy_() —— 原地复制数据
+
+`A.B.data.copy_(C)` 把 `C` 的值**原地写入** `A.B`，不改动 `A.B` 这个对象本身（引用不变）：
+
+```python title="copy-example.py"
+new_linear.weight.data.copy_(merged_weight)   # 把合并后的权重写进新层
+new_linear.bias.data.copy_(orig_linear.bias.detach())
+```
+
+- 下划线 `_` 结尾 = **原地操作**（in-place），直接修改调用者，返回 `self`
+- 走 `.data` 绕过梯度追踪，直接替换数值（与 `A.detach()` 配合使用）
+- 常用于：初始化参数、LoRA 权重合并、权重替换等「只改值不动结构」的场景
+
+::::warning
+**`=` 与 `copy_()` 的区别**：`A.B = C` 是**换对象**（`A.B` 指向新张量）；`A.B.data.copy_(C)` 是**改数值**（`A.B` 还是原来的对象，只是值变了）。需要保持引用/注册关系不变时，用 `copy_()`。
+::::
+
+## 6. 创建张量
 
 ```python title="create-example.py"
 torch.randn(2, 3)        # 标准正态分布 [2, 3]
