@@ -69,6 +69,41 @@
         mask-image: linear-gradient(to bottom, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
     }
 
+    .toc-tooltip {
+        position: fixed;
+        z-index: 100;
+        max-width: 24rem;
+        padding: 0.5rem 0.875rem;
+        border-radius: 0.75rem;
+        background: color-mix(in oklab, var(--card-bg) 92%, transparent);
+        backdrop-filter: blur(8px);
+        color: var(--btn-content);
+        border: 1px solid color-mix(in oklab, var(--btn-regular-bg) 80%, transparent);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 0.10);
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(4px) scale(0.98);
+        transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .toc-tooltip.visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    .toc-tooltip::before {
+        content: "";
+        position: absolute;
+        top: -5px;
+        left: 1.25rem;
+        width: 10px;
+        height: 10px;
+        background: inherit;
+        border-left: 1px solid color-mix(in oklab, var(--btn-regular-bg) 80%, transparent);
+        border-top: 1px solid color-mix(in oklab, var(--btn-regular-bg) 80%, transparent);
+        transform: rotate(45deg);
+    }
+
     .hide-scrollbar {
         scrollbar-width: none;
         -ms-overflow-style: none;

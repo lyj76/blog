@@ -34,7 +34,7 @@ const maxLevel = siteConfig.toc.depth;
 {isPostsRoute &&
 <table-of-contents class:list={[className, "group"]}>
     {headings.filter((heading) => heading.depth < minDepth + maxLevel).map((heading) =>
-            <a href={`#${heading.slug}`} title={removeTailingHash(heading.text)}
+            <a href={`#${heading.slug}`}
                class="px-2 flex gap-2 relative transition w-full min-h-9 rounded-xl
         hover:bg-[var(--toc-btn-hover)] active:bg-[var(--toc-btn-active)] py-2
     ">
@@ -50,7 +50,7 @@ const maxLevel = siteConfig.toc.depth;
                     {heading.depth == minDepth + 1 && <div class="transition w-2 h-2 rounded-[0.1875rem] bg-[var(--toc-badge-bg)]"></div>}
                     {heading.depth == minDepth + 2 && <div class="transition w-1.5 h-1.5 rounded-sm bg-black/5 dark:bg-white/10"></div>}
                 </div>
-                <div class:list={["transition text-sm truncate min-w-0", {
+                <div class:list={["toc-text transition text-sm truncate min-w-0", {
                     "text-50": heading.depth == minDepth || heading.depth == minDepth + 1,
                     "text-30": heading.depth == minDepth + 2,
                 }]}>{removeTailingHash(heading.text)}</div>
@@ -72,6 +72,7 @@ class TableOfContents extends HTMLElement {
     tocEntries: HTMLAnchorElement[] = [];
     active: boolean[] = [];
     activeIndicator: HTMLElement | null = null;
+    tooltip: HTMLDivElement | null = null;
 
     constructor() {
         super();
@@ -201,6 +202,37 @@ class TableOfContents extends HTMLElement {
         return min < value && value < max;
     };
 
+    showTooltip = (entry: HTMLAnchorElement) => {
+        // 只有标题被截断（显示省略号）时才弹提示框，短标题不打扰
+        const textEl = entry.querySelector<HTMLElement>(".toc-text");
+        if (!textEl || textEl.scrollWidth <= textEl.clientWidth) return;
+        if (!this.tooltip) {
+            this.tooltip = document.createElement("div");
+            this.tooltip.className = "toc-tooltip";
+            document.body.appendChild(this.tooltip);
+        }
+        this.tooltip.textContent = textEl.textContent || "";
+
+        // 先显示拿到实际尺寸，再做边界钳制
+        this.tooltip.classList.add("visible");
+        this.tooltip.style.left = "0px";
+        this.tooltip.style.top = "0px";
+        const tw = this.tooltip.offsetWidth;
+        const th = this.tooltip.offsetHeight;
+        const rect = entry.getBoundingClientRect();
+        let left = Math.min(rect.left, window.innerWidth - tw - 12);
+        let top = rect.bottom + 8;
+        if (top + th > window.innerHeight - 12) {
+            top = rect.top - th - 8; // 下方放不下就移到上方
+        }
+        this.tooltip.style.left = `${Math.max(12, left)}px`;
+        this.tooltip.style.top = `${top}px`;
+    };
+
+    hideTooltip = () => {
+        this.tooltip?.classList.remove("visible");
+    };
+
     connectedCallback() {
         // wait for the onload animation to finish, which makes the `getBoundingClientRect` return correct values
         const element = document.querySelector('.prose');
@@ -232,6 +264,13 @@ class TableOfContents extends HTMLElement {
 
         if (this.tocEntries.length === 0) return;
 
+        // 悬停显示完整标题提示框
+        this.tocEntries.forEach((entry) => {
+            entry.addEventListener("mouseenter", () => this.showTooltip(entry));
+            entry.addEventListener("mouseleave", this.hideTooltip);
+        });
+        this.tocEl.addEventListener("scroll", this.hideTooltip, { passive: true });
+
         this.sections = new Array(this.tocEntries.length);
         this.headings = new Array(this.tocEntries.length);
         for (let i = 0; i < this.tocEntries.length; i++) {
@@ -260,6 +299,8 @@ class TableOfContents extends HTMLElement {
         );
         this.observer.disconnect();
         this.tocEl?.removeEventListener("click", this.handleAnchorClick);
+        this.tooltip?.remove();
+        this.tooltip = null;
     };
 }
 
