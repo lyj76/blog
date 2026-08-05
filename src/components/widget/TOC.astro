@@ -203,15 +203,15 @@ class TableOfContents extends HTMLElement {
     };
 
     showTooltip = (entry: HTMLAnchorElement) => {
-        // 只有标题被截断（显示省略号）时才弹提示框，短标题不打扰
+        // 悬停任意目录项都显示完整标题
         const textEl = entry.querySelector<HTMLElement>(".toc-text");
-        if (!textEl || textEl.scrollWidth <= textEl.clientWidth) return;
+        if (!textEl || !textEl.textContent) return;
         if (!this.tooltip) {
             this.tooltip = document.createElement("div");
             this.tooltip.className = "toc-tooltip";
             document.body.appendChild(this.tooltip);
         }
-        this.tooltip.textContent = textEl.textContent || "";
+        this.tooltip.textContent = textEl.textContent;
 
         // 先显示拿到实际尺寸，再做边界钳制
         this.tooltip.classList.add("visible");
