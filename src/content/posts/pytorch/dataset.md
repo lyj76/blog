@@ -56,27 +56,54 @@ class MyDataset(Dataset):
 
 ### 返回什么由你定：元组 vs 字典
 
-`__getitem__` 的返回值**没有固定格式**——你返回什么，DataLoader 就收集什么、堆叠什么：
+`__getitem__` 的返回值**没有固定格式**——你返回什么，DataLoader 就收集什么、堆叠什么。两种写法完全等价，没有对错；字典更自解释（不用记 `batch[0]` 到底是输入还是标签），是 LLM 训练的标准写法。
 
-```python title="return-dict.py"
-# 形式二：返回字典（LLM 训练的标准写法，HF 生态全用这个）
-def __getitem__(self, idx):
-    input_ids = ...                # 第 idx 个样本的 token id
-    labels = ...
-    return {
-        "input_ids": torch.tensor(input_ids, dtype=torch.long),
-        "labels": torch.tensor(labels, dtype=torch.long),
-    }
+**元组形式：按位置堆叠**（假设 `batch_size=2`）：
+
+```python title="tuple-stack.py"
+# 两个样本
+x0, y0 = torch.tensor([1, 2, 3]), torch.tensor([0])   # 样本 0：形状 [3] 和 []
+x1, y1 = torch.tensor([4, 5, 6]), torch.tensor([1])   # 样本 1
+
+# ① 收集：DataLoader 把 2 个样本放进一个列表
+batch_list = [(x0, y0), (x1, y1)]
+
+# ② 按位置堆叠：所有"第 0 个元素"叠一起，所有"第 1 个元素"叠一起
+stacked_x = torch.stack([x0, x1])   # tensor([[1,2,3],[4,5,6]])  形状 [2,3]
+stacked_y = torch.stack([y0, y1])   # tensor([0,1])               形状 [2]
+
+batch = (stacked_x, stacked_y)      # 还是元组
+x_batch, y_batch = batch            # 解包拿到
 ```
 
-| 返回形式 | batch 长什么样 | 取用方式 |
-| --- | --- | --- |
-| 元组 `(x, y)` | `(张量[N,...], 张量[N])` | `x, y = batch`（按位置） |
-| 字典 `{"input_ids": ..., "labels": ...}` | `{"input_ids": 张量[N,...], "labels": 张量[N]}` | `batch["input_ids"]`（按名字） |
+**字典形式：按键堆叠**（你代码里的写法）：
 
-- **两种写法完全等价，没有对错**；你代码里的字典形式是标准做法
-- 字典更自解释：不用记 `batch[0]` 到底是输入还是标签，直接按名字取
-- 规则只有一条：**返回什么由你定，DataLoader 按 `batch_size` 收集 N 个样本，再堆叠成批次**——元组按位置堆叠，字典按键堆叠，堆叠后第 0 维永远是 batch 大小
+```python title="dict-stack.py"
+# 你的 __getitem__ 返回字典：
+def __getitem__(self, idx):
+    ...
+    return {"input_ids": ..., "labels": ...}
+
+# ① 收集：同样放进列表
+batch_list = [
+    {"input_ids": x0, "labels": y0},
+    {"input_ids": x1, "labels": y1},
+]
+
+# ② 按键堆叠：所有 "input_ids" 叠一起，所有 "labels" 叠一起
+stacked_ids  = torch.stack([d["input_ids"] for d in batch_list])   # tensor([[1,2,3],[4,5,6]])  [2,3]
+stacked_labs = torch.stack([d["labels"]    for d in batch_list])   # tensor([0,1])              [2]
+
+batch = {"input_ids": stacked_ids, "labels": stacked_labs}
+batch["input_ids"]   # tensor([[1,2,3],[4,5,6]])
+```
+
+**本质：同一个动作，不同的"分组方式"**：
+
+- 元组 → **按位置分组**：所有样本的第 0 个元素一组、第 1 个元素一组……
+- 字典 → **按键分组**：所有样本的 `"input_ids"` 一组、`"labels"` 一组……
+
+每组内 `torch.stack` 把组里的 N 个张量叠起来，**在最前面插一个新维度**——这就是 batch 第 0 维永远是 batch 大小的原因。
 
 ### DataLoader 是怎么"统一"堆叠的：结构递归
 
@@ -93,19 +120,6 @@ def default_collate(batch):           # batch = [样本0, 样本1, ..., 样本N-
     elif isinstance(elem, torch.Tensor):  # 张量 → 叶子，直接堆叠
         return torch.stack(batch)
 ```
-
-用数字走一遍（`batch_size=2`，样本是 `(x, y)` 元组）：
-
-```python title="stack-walkthrough.py"
-x0, y0 = torch.tensor([1, 2, 3]), torch.tensor([0])   # 样本 0
-x1, y1 = torch.tensor([4, 5, 6]), torch.tensor([1])   # 样本 1
-
-batch = (torch.stack([x0, x1]), torch.stack([y0, y1]))
-#        └──────── 位置 0 分组 ────────┘  └─ 位置 1 分组 ─┘
-# batch = (tensor([[1,2,3],[4,5,6]]), tensor([0,1]))   形状 [2,3] 和 [2]
-```
-
-字典形式则是按键分组：所有 `"input_ids"` 叠一起、所有 `"labels"` 叠一起，`torch.stack` 在**最前面插一个新维度**，所以第 0 维永远是 batch 大小。
 
 ::::note
 **背后的两个抽象（通用知识）**：
