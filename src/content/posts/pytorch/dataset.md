@@ -25,7 +25,7 @@ x, y = dataset[0]   # 索引一个样本，返回 (输入, 标签)
 | 方法 | 作用 | 谁调用 |
 | --- | --- | --- |
 | `__len__` | 返回样本总数，供打乱与分批使用 | `DataLoader` 内部的采样器 |
-| `__getitem__(idx)` | 根据索引返回单个样本 `(x, y)` | 取批次时按索引逐个取 |
+| `__getitem__(idx)` | 根据索引返回**单个样本，返回什么由你定**（元组 / 字典 / 张量都行） | 取批次时按索引逐个取 |
 
 ```python title="dataset-example.py"
 from torch.utils.data import Dataset
@@ -53,6 +53,30 @@ class MyDataset(Dataset):
 ::::note
 **Map-style 与 Iterable-style**：`Dataset` 默认是 Map-style（可通过索引随机取）；Iterable-style 只能顺序取，用于流式加载。绝大多数场景用 Map-style。
 ::::
+
+### 返回什么由你定：元组 vs 字典
+
+`__getitem__` 的返回值**没有固定格式**——你返回什么，DataLoader 就收集什么、堆叠什么：
+
+```python title="return-dict.py"
+# 形式二：返回字典（LLM 训练的标准写法，HF 生态全用这个）
+def __getitem__(self, idx):
+    input_ids = ...                # 第 idx 个样本的 token id
+    labels = ...
+    return {
+        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "labels": torch.tensor(labels, dtype=torch.long),
+    }
+```
+
+| 返回形式 | batch 长什么样 | 取用方式 |
+| --- | --- | --- |
+| 元组 `(x, y)` | `(张量[N,...], 张量[N])` | `x, y = batch`（按位置） |
+| 字典 `{"input_ids": ..., "labels": ...}` | `{"input_ids": 张量[N,...], "labels": 张量[N]}` | `batch["input_ids"]`（按名字） |
+
+- **两种写法完全等价，没有对错**；你代码里的字典形式是标准做法
+- 字典更自解释：不用记 `batch[0]` 到底是输入还是标签，直接按名字取
+- 规则只有一条：**返回什么由你定，DataLoader 按 `batch_size` 收集 N 个样本，再堆叠成批次**——元组按位置堆叠，字典按键堆叠，堆叠后第 0 维永远是 batch 大小
 
 ## 3. DataLoader：批量加载器
 

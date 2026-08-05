@@ -1,7 +1,29 @@
 <script context="module" lang="ts">
+import { writable } from "svelte/store";
+
 // 悬停提示框：所有目录树节点共享同一个 tooltip（模块级单例），
 // 与右侧 TOC 的提示框共用 .toc-tooltip 主题样式。
 let tooltip: HTMLDivElement | null = null;
+
+// 当前页面路径（响应式 store）：swup 导航时更新，让高亮跟随页面切换。
+// 侧边栏不在 swup 的 containers 里，DOM 不会刷新，所以必须用 store 通知。
+export const activePathStore = writable("");
+
+let swupBound = false;
+function bindSwupPathSync() {
+	if (swupBound) return;
+	swupBound = true;
+	const bind = () => {
+		window.swup?.hooks?.on("visit:start", (visit: { to: { url: string } }) => {
+			activePathStore.set(visit.to.url.split("?")[0]);
+		});
+	};
+	if (window?.swup?.hooks) {
+		bind();
+	} else {
+		document.addEventListener("swup:enable", bind);
+	}
+}
 
 function getTooltip(): HTMLDivElement {
 	if (!tooltip) {
@@ -40,10 +62,12 @@ function hideTooltip() {
 // 滚动页面时隐藏提示框（swup 导航触发的滚动也会走到这里）
 if (typeof document !== "undefined") {
 	document.addEventListener("scroll", hideTooltip, { passive: true });
+	bindSwupPathSync();
 }
 </script>
 
 <script lang="ts">
+import { onMount } from "svelte";
 import type { FileTreeNode } from "@utils/tree-utils";
 import Icon from "@iconify/svelte";
 
@@ -57,8 +81,14 @@ function toggle() {
 	isOpen = !isOpen;
 }
 
+// 水合后用 SSR 传入的初始路径填充 store（保证首次加载高亮正确）
+onMount(() => {
+	activePathStore.set(currentPath);
+});
+
 $: isFile = node.type === "file";
-$: isActive = isFile && node.url && currentPath.includes(encodeURI(node.url).replace(/\/$/, ""));
+$: activePath = $activePathStore || currentPath;
+$: isActive = isFile && node.url && activePath.includes(encodeURI(node.url).replace(/\/$/, ""));
 </script>
 
 <div class="tree-node flex flex-col text-sm select-none">
