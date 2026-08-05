@@ -86,6 +86,22 @@ y2 = model.forward(x)    # 不推荐：跳过钩子
 | `.state_dict()` | 返回 `_parameters` 与缓冲区（buffer）的键值快照，用于保存与加载 |
 | `.device` | ⚠️ 没有这个属性；设备信息要通过参数的 `.device` 获取 |
 
+### train() / eval() 到底做了什么
+
+```python title="train-eval.py"
+model.train()   # 递归把所有子模块的 training 标志设为 True
+model.eval()    # 递归把所有子模块的 training 标志设为 False
+```
+
+- **机制**：`train()` / `eval()` 不是"魔法开关"，而是**递归遍历整棵模块树，把每个模块的 `.training` 属性设为 `True` / `False`**
+- **谁在读这个标志**：`Dropout` 在 `forward` 里查 `self.training`——`True` 时随机丢弃神经元，`False` 时原样通过；`BatchNorm` 也查——`True` 时用当前 batch 的统计量并更新 running 均值，`False` 时用历史 running 统计量
+- **`nn.Linear` 不关心 training**：它没有任何行为差异——所以只用 Linear 的模型，train/eval 切换看不出区别
+- **为什么推理前必须 `eval()`**：忘记切回 `eval()`，Dropout 还在随机丢神经元，输出不稳定；BatchNorm 用 batch 统计量导致结果偏差
+
+::::warning
+**`eval()` 不关梯度**：`eval()` 只改 `training` 标志，**不**停止梯度计算。推理时省显存要靠 `with torch.no_grad():`（见"自动求导与梯度"篇）——两者配合才是完整推理姿势。
+::::
+
 **按参数重建线性层**（LoRA 合并权重时常用）：用已有层的维度/设备/精度创建同构新层：
 
 ```python title="recreate-linear.py"

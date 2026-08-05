@@ -83,6 +83,32 @@ for batch in dataloader:
 
 **总批数**：`len(dataloader)` = `ceil(样本数 / batch_size)`（向上取整）。
 
+### 自定义堆叠方式：`collate_fn`
+
+默认 `collate_fn` 只做一件事：把 N 个样本**堆叠成批次**（list 变张量）。样本形状不一致、或要动态 padding 时，就得自己写：
+
+```python title="collate-example.py"
+def my_collate(batch):                    # batch = [样本1, 样本2, ...]，每批 N 个
+    input_ids = [item["input_ids"] for item in batch]   # 每个是 [seq_i] 长度不一
+    labels    = [item["labels"]    for item in batch]
+
+    # 动态 padding：本批内统一到最长长度
+    max_len = max(len(x) for x in input_ids)
+    padded = []
+    for x in input_ids:
+        padded.append(x + [pad_id] * (max_len - len(x)))   # 短的补 pad_id
+    return {
+        "input_ids": torch.tensor(padded),
+        "labels":    torch.tensor(labels),                 # labels 同样处理
+    }
+
+dataloader = DataLoader(dataset, batch_size=4, collate_fn=my_collate)
+```
+
+- `collate_fn` 收到的 `batch` 是 `__getitem__` 返回值的**列表**（本批 N 个）
+- 默认行为 = `torch.stack` 直接堆叠——要求所有样本形状一致，否则报错
+- 训练 LLM 时样本长度天然不一，**几乎总是需要自定义 collate 做动态 padding**（不 padding 到固定最大长度、只到本批最长，省内存）
+
 ## 4. 完整的训练循环模板
 
 ```python title="train-loop.py"
