@@ -158,6 +158,92 @@
     }
 }
 
+/* 未解析的 wiki 链接（[[目标]] 找不到对应文章时） */
+.wiki-unresolved {
+    color: rgb(0 0 0 / 0.4);
+    text-decoration: underline dashed;
+    text-underline-offset: 0.2em;
+}
+.dark .wiki-unresolved {
+    color: rgb(255 255 255 / 0.4);
+}
+
+/* wiki 链接：hue 与主题色拉开 140°，配虚线下划线，与普通链接一眼区分 */
+/* 用 !important 覆盖主题链接颜色：wiki 链接是站点特性，必须压过
+   .custom-md a 的 color: var(--primary)，特异性战争太脆弱 */
+a[data-wiki-link],
+.prose a[data-wiki-link],
+.markdown-content a[data-wiki-link],
+.custom-md a[data-wiki-link]:not(.no-styling) {
+    color: oklch(0.62 0.15 calc(var(--hue) + 140)) !important;
+    text-decoration: underline dashed;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.22em;
+}
+a[data-wiki-link]:hover,
+.prose a[data-wiki-link]:hover,
+.markdown-content a[data-wiki-link]:hover,
+.custom-md a[data-wiki-link]:not(.no-styling):hover {
+    color: oklch(0.72 0.16 calc(var(--hue) + 140)) !important;
+}
+
+/* ===== TOC 向左展开 =====
+ * 展开 = 宽度加 --toc-extra 并整体左移同样距离：右缘固定、左缘向左伸入文章区。 */
+#toc-wrapper {
+    --toc-extra: 0rem;
+}
+#toc-wrapper.toc-expanded {
+    --toc-extra: 14rem;
+}
+#toc-inner-wrapper {
+    width: calc(var(--toc-width) + var(--toc-extra));
+    transform: translateX(calc(-1 * var(--toc-extra)));
+    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+#toc-wrapper.toc-expanded #toc-inner-wrapper {
+    z-index: 45; /* 伸入文章区时要盖在 main(z-30) 之上 */
+}
+/* 展开时标题允许换行，减少截断，长标题可看全 */
+#toc-wrapper.toc-expanded .toc-text {
+    white-space: normal;
+    line-height: 1.45;
+}
+/* 展开/收起按钮：悬浮在目录列左缘 */
+#toc-expand-btn {
+    position: fixed;
+    top: 4.5rem;
+    left: calc((100vw + var(--page-width)) / 2 - var(--toc-extra));
+    transform: translateX(-50%);
+    z-index: 46; /* 高于展开后的 toc-inner(45)，保证可点 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--card-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border: 1px solid color-mix(in oklab, var(--btn-regular-bg) 70%, transparent);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+    color: var(--btn-content);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: left 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s, color 0.2s;
+}
+#toc-expand-btn:hover {
+    background: color-mix(in oklab, var(--btn-regular-bg) 45%, transparent);
+    color: var(--primary);
+}
+#toc-expand-btn .toc-collapse-icon {
+    display: none;
+}
+#toc-wrapper.toc-expanded #toc-expand-btn .toc-expand-icon {
+    display: none;
+}
+#toc-wrapper.toc-expanded #toc-expand-btn .toc-collapse-icon {
+    display: inline;
+}
+
 .custom-md img, #post-cover img {
     @apply cursor-zoom-in
 }

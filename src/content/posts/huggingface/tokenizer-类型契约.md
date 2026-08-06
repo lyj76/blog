@@ -8,13 +8,13 @@ category: HuggingFace
 
 # HuggingFace Tokenizer 类型契约：输入输出结构全解
 
-Tokenizer 负责「文本 ↔ token id」互转。理解它「怎么加载、每种调用返回什么类型、有哪些字段、内部怎么处理」，是看懂任何 transformers 代码的第一步。
+Tokenizer 负责「文本 ↔ token id」互转。这篇按**使用顺序**展开：先怎么拿到它（加载）→ 调用它返回什么（BatchEncoding）→ 三种调用方式 → **互转的方法**（encode / convert_tokens_to_ids / decode）→ 参数与特殊 token。
 
 > 归属：**`transformers` 库**（`from transformers import AutoTokenizer`）——HF 的模型库，和 `datasets`（数据）、PyTorch（训练引擎）平级。
 
 ## 1. 加载：AutoTokenizer.from_pretrained()
 
-训练脚本里拿到 tokenizer 的唯一入口——**和模型共用同一个路径**：
+一切从「拿到 tokenizer」开始——它是训练脚本里创建 tokenizer 的唯一入口，**和模型共用同一个路径**：
 
 ```python title="tokenizer-load.py"
 from transformers import AutoTokenizer
@@ -30,7 +30,7 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)   # 本地路径或 Hub id
 
 ```python title="post-load.py"
 tokenizer.pad_token_id is None          # ① 检查有没有 pad_token（很多 LLM 没有）
-if tokenizer.pad_token_id is None:      # ② 没有就用 eos 兜底（见第 5 节）
+if tokenizer.pad_token_id is None:      # ② 没有就用 eos 兜底（见第 6 节）
     tokenizer.pad_token = tokenizer.eos_token
 tokenizer.save_pretrained(save_dir)     # ③ 需要时保存（和模型成对，见下）
 ```
@@ -38,7 +38,7 @@ tokenizer.save_pretrained(save_dir)     # ③ 需要时保存（和模型成对�
 **保存是加载的逆操作**：`tokenizer.save_pretrained(dir)` 把词表文件写进文件夹，和 `model.save_pretrained(dir)` **成对使用**——**模型文件里不包含分词器**，部署/迁移时要单独带上。
 
 ::::note
-**Auto 机制细节见「Auto 机制与模型加载」篇**：`AutoTokenizer` 按仓库里的配置自动选对具体实现类（如 Qwen 的 `Qwen2Tokenizer`）——你不需要知道用哪个类，只传路径即可。
+**Auto 机制细节见 [[auto-机制与模型加载]]**：`AutoTokenizer` 按仓库里的配置自动选对具体实现类（如 Qwen 的 `Qwen2Tokenizer`）——你不需要知道用哪个类，只传路径即可。
 ::::
 
 ## 2. BatchEncoding：tokenizer 调用的返回类型
@@ -96,7 +96,35 @@ inputs["attention_mask"]   # tensor([[1, 1, 1, 1]])
 **什么时候用哪个**：训练数据构造用 `encode`，你要的是裸 id，方便自己拼接 prompt + target、做 `-100` 掩码；推理或喂模型用直接调用 + `return_tensors="pt"`，模型需要张量输入和 `attention_mask`。
 ::::
 
-## 4. 参数体系：padding / truncation / max_length
+## 4. 常用方法：convert_tokens_to_ids / decode（互转闭环）
+
+第 3 节的 `encode` 管「文本 → id 列表」。互转的**另一半**和特殊场景在这里：
+
+```python title="token-methods.py"
+# 任意 token 字符串 → id（比如对话模板的结束标记）
+eos_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+# generate 时告诉模型"遇到这个就停"（见 [[generate-生成机制]]）
+
+# id 列表 → 文本（生成结果还原成文字）
+text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+text.strip()
+```
+
+| 方法 | 方向 | 返回 |
+| --- | --- | --- |
+| `encode(text)` | 文本 → id 列表 | `list[int]`（见第 3 节） |
+| `convert_tokens_to_ids("token")` | 单个 token 字符串 → id | `int` |
+| `decode(ids)` | id 列表 → 文本 | `str` |
+
+- `convert_tokens_to_ids` 只认**单个 token**（如 `<|im_end|>`），不是整段文本——整段文本用 `encode`
+- `decode` 是 `encode` 的**逆操作**：生成完拿到 token id，`decode(skip_special_tokens=True)` 还原成文字并去掉 `<|im_end|>` 这类标记
+- 三者合起来是完整的「文本 ↔ id」闭环：`encode` 进去、`decode` 出来（切片语法见 [[张量形状转置切片]]）
+
+::::note
+**decode 和 generate 是一对**：`generate()` 产出的是 token id（见 [[generate-生成机制]]），`decode` 把它们变回人能读的文本——生成后必有的一步。
+::::
+
+## 5. 参数体系：padding / truncation / max_length
 
 直接调用 tokenizer 时，常用参数控制输出结构：
 
@@ -127,7 +155,7 @@ inputs["attention_mask"]   # tensor([[1, 1, 1, 1, 0, 0],
 - `add_special_tokens=False`：拼接 prompt + target 时手动控制，避免重复加特殊 token
 - `max_length` 和 `truncation` 配合：模型有最大序列长度（如 2048 / 4096），超了必须截断
 
-## 5. 特殊 token 体系
+## 6. 特殊 token 体系
 
 每个 tokenizer 持有四个特殊 token 的 id：
 
@@ -157,7 +185,7 @@ if tokenizer.pad_token_id is None:
 把结束符当填充符用，是 LLM 训练脚本的标配写法。
 ::::
 
-## 6. padding_side：填充方向与生成的意义
+## 7. padding_side：填充方向与生成的意义
 
 ```python title="padding-side.py"
 tokenizer.padding_side = "left"   # 左填充：pad 加在序列开头
@@ -168,10 +196,10 @@ tokenizer.padding_side = "right"  # 右填充：pad 加在序列末尾（默认�
 - **左填充**：pad 在前，真实 token 在后。**生成时必须用左填充**
 
 ::::important
-**为什么生成要左填充**：decoder-only 模型从序列末尾往后生成新 token。如果右填充，真实文本后面跟着 pad，模型会在 pad 后面生成，位置错乱。左填充保证真实 token 紧贴序列末尾，新生成的 token 自然接在后面。
+**为什么生成要左填充**：decoder-only 模型从序列末尾往后生成新 token（见 [[generate-生成机制]]）。如果右填充，真实文本后面跟着 pad，模型会在 pad 后面生成，位置错乱。左填充保证真实 token 紧贴序列末尾，新生成的 token 自然接在后面。
 ::::
 
-## 7. attention_mask 的两个作用
+## 8. attention_mask 的两个作用
 
 `attention_mask` 是一个全 0/1 的序列，长度和 `input_ids` 相同：
 
@@ -188,7 +216,7 @@ attention_mask  = [1,   1, 1, 1,   0,   0]
 2. **配合因果掩码**：在 CausalLM 中，模型内部还有一层因果掩码（下三角，防止看未来 token）。attention_mask 和因果掩码组合，共同决定「哪些位置能被哪些位置看到」
 
 ::::note
-**attention_mask 不是因果掩码**：attention_mask 由 tokenizer 生成，标记填充位；因果掩码由模型内部生成，防止看未来。两者是独立的机制，在前向传播中组合使用。详见「架构地图」篇。
+**attention_mask 不是因果掩码**：attention_mask 由 tokenizer 生成，标记填充位；因果掩码由模型内部生成，防止看未来。两者是独立的机制，在前向传播中组合使用（详见 [[架构-编码器与解码器]]）。
 ::::
 
 ## 小结
@@ -197,9 +225,11 @@ attention_mask  = [1,   1, 1, 1,   0,   0]
 | --- | --- | --- |
 | `AutoTokenizer.from_pretrained(path)` | `Tokenizer` 实例 | 加载（读词表文件，非权重） |
 | `tokenizer.save_pretrained(dir)` | 写词表文件 | 保存（和模型成对） |
-| `tokenizer.encode(text)` | `list[int]` | 拿裸 id 做数据构造 |
+| `tokenizer.encode(text)` | `list[int]` | 文本 → id 列表（数据构造） |
 | `tokenizer(text)` | `BatchEncoding`（list 值） | 完整处理结果 |
 | `tokenizer(text, return_tensors="pt")` | `BatchEncoding`（tensor 值） | 喂模型 |
+| `tokenizer.convert_tokens_to_ids("token")` | `int` | 单个 token → id（生成停止标记） |
+| `tokenizer.decode(ids)` | `str` | id 列表 → 文本（生成后还原） |
 | `padding=True` | 补齐 + attention_mask | 批次等长 |
 | `tokenizer.pad_token_id` | `int` 或 `None` | 填充符（None 要兜底） |
 | `tokenizer.padding_side = "left"` | 设置属性 | 生成时左填充 |

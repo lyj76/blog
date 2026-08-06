@@ -58,8 +58,8 @@ const maxLevel = siteConfig.toc.depth;
                 </div>
                 <div class:list={["toc-text transition truncate min-w-0", {
                     "text-sm font-bold": heading.depth == minDepth,
-                    "text-sm text-50": heading.depth == minDepth + 1,
-                    "text-xs text-30": heading.depth == minDepth + 2,
+                    "text-sm text-75": heading.depth == minDepth + 1,
+                    "text-xs text-50": heading.depth == minDepth + 2,
                 }]}>{removeTailingHash(heading.text)}</div>
             </a>
     )}
@@ -250,6 +250,16 @@ class TableOfContents extends HTMLElement {
         } else {
             console.debug('Animation element not found');
         }
+        // 目录向左展开 / 收起（点击目录列展开，按钮收起）
+        // 注意：swup 替换 #toc 时 connectedCallback 会重跑，按钮监听器只绑一次
+        const wrapper = document.getElementById("toc-wrapper");
+        const expandBtn = document.getElementById("toc-expand-btn");
+        if (expandBtn && !expandBtn.dataset.bound) {
+            expandBtn.dataset.bound = "true";
+            expandBtn.addEventListener("click", () => {
+                wrapper?.classList.toggle("toc-expanded");
+            });
+        }
     };
 
     init() {
@@ -261,6 +271,14 @@ class TableOfContents extends HTMLElement {
 
         this.tocEl.addEventListener("click", this.handleAnchorClick, {
             capture: true,
+        });
+
+        // 点击目录列本身（收起状态）→ 向左展开
+        const wrapper = document.getElementById("toc-wrapper");
+        this.tocEl.addEventListener("click", () => {
+            if (wrapper && !wrapper.classList.contains("toc-expanded")) {
+                wrapper.classList.add("toc-expanded");
+            }
         });
 
         this.activeIndicator = document.getElementById("active-indicator");
