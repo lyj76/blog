@@ -23,6 +23,24 @@ category: PyTorch
 **两处容易记错**：`A.grad` 的类型是**张量**（与 `A` 同形状），不是浮点数；`A.is_leaf` 是布尔值（`True` / `False`），不是指针。
 ::::
 
+### 用 loss 串一遍：真实场景里的 Tensor 结构
+
+训练里最常见的张量是 `loss`，它恰好把上面这些属性全部串起来：
+
+```python title="loss-tensor.py"
+loss = model(input_ids=input_ids, labels=labels).loss
+print(loss.shape)          # torch.Size([]) —— 0 维标量张量
+print(loss.requires_grad)  # True —— 由可学习参数一路算来
+print(loss.grad_fn)        # <...Backward> —— 背着计算图，是反向传播的起点
+print(loss.is_leaf)        # False —— 是运算结果，不是叶子
+print(loss.item())         # 2.3456 —— 转成 Python float（打日志用）
+print(loss.detach())       # 新张量，切断计算图（可再 .numpy()）
+```
+
+- `loss` 不是 Python 的 `float`，而是「既装着数值、又背着计算图」的标量 Tensor——正因为背着计算图，它才能 `.backward()`
+- 打日志用 `.item()`（详见「训练循环与优化器」篇）；存文件 / 转 numpy 用 `.detach().cpu().numpy()`（详见下文 `detach()` 小节）
+- **任何由运算产生的标量张量都有这些属性，loss 只是最常碰到的那一个**（具体到「谁能发起 backward」见「自动求导与梯度」篇）
+
 ## 2. 计算图与叶子结点
 
 PyTorch 用**动态计算图**记录运算历史。以 $W = 2A$ 为例：
