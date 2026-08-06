@@ -40,7 +40,7 @@ print(loss.detach())       # 新张量，切断计算图（可再 .numpy()）
 ```
 
 - `loss` 不是 Python 的 `float`，而是「既装着数值、又背着计算图」的标量 Tensor——正因为背着计算图，它才能 `.backward()`
-- 打日志用 `.item()`（详见「训练循环与优化器」篇）；存文件 / 转 numpy 用 `.detach().cpu().numpy()`（详见下文 `detach()` 小节）
+- 打日志用 `.item()`（见「设备与精度管理」篇）；存文件 / 转 numpy 用 `.detach().cpu().numpy()`（详见下文 `detach()` 小节）
 - **任何由运算产生的标量张量都有这些属性，loss 只是最常碰到的那一个**（具体到「谁能发起 backward」见「自动求导与梯度」篇）
 
 ## 2. 计算图与叶子结点

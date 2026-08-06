@@ -156,6 +156,36 @@ model.to(device)
 **模型和输入必须在同一设备**：`model` 在 `"cuda"`，`inputs` 也必须在 `"cuda"`。`model.to(device)` 搬模型，`inputs.to(device)` 搬数据，两步都要做。
 ::::
 
+## 7. save_pretrained：加载的逆操作
+
+`from_pretrained` 能加载，是因为之前有人 `save_pretrained` 过——两者成对，机制完全镜像：
+
+```python title="save-pretrained.py"
+model.save_pretrained(merged_dir)      # 模型：写 config.json + 权重文件
+tokenizer.save_pretrained(merged_dir)  # 分词器：写词表文件
+```
+
+| 操作 | 写了/读了什么 |
+| --- | --- |
+| `save_pretrained(dir)` | 往目录写 `config.json`（结构配置）+ `model.safetensors` / `pytorch_model.bin`（权重） |
+| `from_pretrained(dir)` | 读 `config.json` 重建结构 → 读权重填进去 |
+
+**为什么和原生 `torch.save` 不同**：`save_pretrained` 存的是**"目录"而不是单个文件**——权重本质还是 `state_dict`（见「模型保存与加载」篇），但**多存了一份 `config.json`**，所以 `from_pretrained` 能自动重建结构，不用你手动建实例。
+
+**两个必须成对保存**：
+
+```python title="save-both.py"
+model.save_pretrained(dir)          # ① 权重 + 结构
+tokenizer.save_pretrained(dir)      # ② 词表（模型文件里没有分词器！）
+```
+
+- 部署/迁移时**模型和分词器要一起带上**——光有模型没有分词器，文本进不去
+- 加载时也成对：`AutoModelForCausalLM.from_pretrained(dir)` + `AutoTokenizer.from_pretrained(dir)`
+
+::::tip
+**保存位置**：`save_pretrained` 写"目录"（如 `"./merged_model"`），里面是 `config.json` + 权重文件。之后 `from_pretrained("merged_model")` 直接读回——这就是"合并后的 LoRA 模型怎么落地部署"的标准姿势。
+::::
+
 ## 小结
 
 | 语法 | 返回 / 作用 |
@@ -167,3 +197,5 @@ model.to(device)
 | `getattr(config, "xxx", default)` | 安全读取可能缺失的字段 |
 | `torch_dtype=torch.bfloat16` | 指定权重精度 |
 | `model.to("cuda")` | 参数搬设备 |
+| `model.save_pretrained(dir)` | 写 config + 权重（与 from_pretrained 成对） |
+| `tokenizer.save_pretrained(dir)` | 写词表文件（与模型成对保存） |
