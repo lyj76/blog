@@ -1,7 +1,7 @@
 ---
 title: HuggingFace CausalLM 前向契约：model() 返回什么
 published: 2026-08-05
-description: CausalLMOutputWithPast 字段表（loss / logits / past_key_values / hidden_states / attentions）、labels 传入才返回 loss、shift 一位逻辑、-100 掩码与 ignore_index、logits 形状 [batch, seq, vocab]、train/eval 模式、inputs 字典解包
+description: forward 参数契约（input_ids / attention_mask / labels）、CausalLMOutputWithPast 字段表（loss / logits / past_key_values / hidden_states / attentions）、labels 传入才返回 loss、shift 一位逻辑、-100 掩码与 ignore_index、logits 形状、train/eval 模式、inputs 字典解包
 tags: [HuggingFace, transformers, CausalLM, 前向传播, loss]
 category: HuggingFace
 ---
@@ -41,7 +41,22 @@ outputs.past_key_values   # tuple of tuples，KV 缓存（推理加速用）
 **不是所有字段都有值**：`loss` 只在传 `labels` 时计算；`past_key_values` 只在 `use_cache=True` 时返回。不传 labels 时 `outputs.loss` 是 `None`，但 `outputs.logits` 永远有。
 ::::
 
-## 2. labels 与 loss：内部自动算交叉熵
+## 2. forward 的参数契约：input_ids / attention_mask / labels
+
+`forward` 接收的关键参数就这几个（所有 HF CausalLM 模型遵循同一签名）：
+
+| 参数 | 含义 | 形状 | 训练时传？ |
+| --- | --- | --- | --- |
+| `input_ids` | 输入 token 序列 | `[batch, seq]` | 必传 |
+| `attention_mask` | 标记真实 / 填充位（1=真实，0=填充） | `[batch, seq]` | 通常传 |
+| `position_ids` | 每个位置的下标编号 | `[batch, seq]` | 少用（默认自动生成） |
+| `past_key_values` | 历史 KV 缓存（生成加速用） | 元组 | 生成时用 |
+| `labels` | 目标 token 序列（标准答案） | `[batch, seq]` | **训练时传** |
+
+- **为什么必须用关键字参数调用**：`forward` 参数多、顺序固定——`labels` 排在第六位，第二位是 `attention_mask`。写 `model(input_ids, labels)` 位置调用会把 labels 错塞给 `attention_mask`，**不报错但行为完全错误**。所以 HF 生态永远写 `model(input_ids=..., labels=...)`（参数语法见 Python「函数参数与解包」篇）
+- **两种调用形态**：不传 `labels` 是推理形态（只算 logits）；传 `labels` 是训练形态（内部自动算交叉熵，返回带 `loss` 的对象）——详见下一节
+
+## 3. labels 与 loss：内部自动算交叉熵
 
 ```python title="labels-loss.py"
 # 传 labels → 模型自动算 loss
@@ -62,7 +77,7 @@ outputs.logits  # tensor[batch, seq, vocab]
 **训练循环的标准写法**：`loss = model(input_ids=..., labels=...).loss`，一行搞定前向 + 算损失。然后 `loss.backward()` + `optimizer.step()`。
 ::::
 
-## 3. shift 一位逻辑：位置 n 预测 n+1
+## 4. shift 一位逻辑：位置 n 预测 n+1
 
 CausalLM 的训练目标是「用前 n 个 token 预测第 n+1 个」。模型内部对 logits 和 labels 做了 shift：
 
@@ -88,7 +103,7 @@ CausalLM 的训练目标是「用前 n 个 token 预测第 n+1 个」。模型�
 **你不用手动 shift**：HuggingFace 的 CausalLM 在 `forward` 内部自动做 shift。你只要把 `input_ids` 和 `labels` 传成同一个序列（或 labels 是目标序列），模型自己处理对齐。
 ::::
 
-## 4. -100 掩码：ignore_index 约定
+## 5. -100 掩码：ignore_index 约定
 
 ```python title="ignore-index.py"
 # labels 中 -100 的位置不计入损失
@@ -105,7 +120,7 @@ labels = torch.tensor([
 **-100 不是魔法数字**：它是 PyTorch `CrossEntropyLoss` 的 `ignore_index` 默认值。HuggingFace 没有改这个默认值，所以 `-100` 就是「忽略此位置」的约定。如果你把 `ignore_index` 改成别的数，那就要填那个数。
 ::::
 
-## 5. logits 形状：[batch, seq, vocab]
+## 6. logits 形状：[batch, seq, vocab]
 
 ```python title="logits-shape.py"
 outputs = model(input_ids=input_ids)
@@ -119,7 +134,7 @@ print(logits.shape)   # torch.Size([2, 128, 151936])
 - 取下一个 token 预测：`next_token_logits = logits[:, -1, :]`，形状 `[batch, vocab_size]`
 - 转概率：`probs = torch.softmax(next_token_logits, dim=-1)`
 
-## 6. train() / eval()：模式切换
+## 7. train() / eval()：模式切换
 
 ```python title="train-eval.py"
 model.train()   # 训练模式：Dropout 生效、BatchNorm 用 batch 统计量
@@ -134,7 +149,7 @@ model.eval()    # 推理模式：Dropout 关闭、BatchNorm 用历史统计量
 **这是 PyTorch 的机制，不是 HuggingFace 的**：`model.train()` / `model.eval()` 来自 `nn.Module`，所有 PyTorch 模型都有。HuggingFace 的模型继承自 `nn.Module`，所以也有这两个方法。
 ::::
 
-## 7. inputs 字典解包
+## 8. inputs 字典解包
 
 ```python title="kwargs-unpack.py"
 inputs = tokenizer(prompt, return_tensors="pt").to(device)
@@ -156,6 +171,7 @@ outputs = model(**inputs)
 
 | 字段 / 语法 | 类型 / 作用 |
 | --- | --- |
+| `forward` 参数 | `input_ids` / `attention_mask` / `labels` / `position_ids` / `past_key_values`，必须关键字调用 |
 | `outputs.loss` | `Optional[Tensor]`，传 labels 才有 |
 | `outputs.logits` | `Tensor[batch, seq, vocab]`，永远有 |
 | `outputs.past_key_values` | `Optional[Tuple]`，`use_cache=True` 时有 |
