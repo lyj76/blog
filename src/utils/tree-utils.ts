@@ -8,6 +8,7 @@ export interface FileTreeNode {
 	slug?: string;
 	url?: string;
 	count?: number;
+	category?: string; // 文件夹下文章的分类（用于计数徽章跳转归档页）
 	children: FileTreeNode[];
 }
 
@@ -22,6 +23,10 @@ export async function getDirectoryTree(): Promise<FileTreeNode[]> {
 		// post.id is like "计算机/操作系统/进程.md" or "markdown.md"
 		const normalizedId = post.id.replace(/\\/g, "/");
 		const parts = normalizedId.split("/");
+		const postCategory =
+			typeof post.data.category === "string" && post.data.category.trim()
+				? post.data.category.trim()
+				: undefined;
 
 		let currentLevel = root;
 		let currentPath = "";
@@ -42,12 +47,17 @@ export async function getDirectoryTree(): Promise<FileTreeNode[]> {
 					path: currentPath,
 					count: 0,
 					children: [],
+					category: postCategory,
 				};
 				currentLevel.push(dirNode);
 			}
 
 			if (dirNode.count !== undefined) {
 				dirNode.count++;
+			}
+
+			if (postCategory && !dirNode.category) {
+				dirNode.category = postCategory;
 			}
 
 			currentLevel = dirNode.children;

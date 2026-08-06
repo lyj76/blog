@@ -69,6 +69,17 @@
         mask-image: linear-gradient(to bottom, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
     }
 
+    /* 当前阅读位置：文字变主题色，一眼可辨（配合移动的高亮条） */
+    #toc a.visible .toc-text {
+        color: var(--primary);
+        font-weight: 500;
+    }
+    /* 激活项的数字/圆点徽章也跟随主题色 */
+    #toc a.visible .toc-badge,
+    #toc a.visible div:first-child {
+        color: var(--primary);
+    }
+
     .toc-tooltip {
         position: fixed;
         z-index: 100;

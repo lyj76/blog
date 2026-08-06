@@ -35,9 +35,15 @@ const maxLevel = siteConfig.toc.depth;
 <table-of-contents class:list={[className, "group"]}>
     {headings.filter((heading) => heading.depth < minDepth + maxLevel).map((heading) =>
             <a href={`#${heading.slug}`}
-               class="px-2 flex gap-2 relative transition w-full min-h-9 rounded-xl
-        hover:bg-[var(--toc-btn-hover)] active:bg-[var(--toc-btn-active)] py-2
-    ">
+               class:list={["px-2 flex gap-2 relative transition w-full rounded-xl py-2",
+                   "hover:bg-[var(--toc-btn-hover)] active:bg-[var(--toc-btn-active)]",
+                   {
+                       "min-h-9": heading.depth == minDepth,
+                       "min-h-8": heading.depth == minDepth + 1,
+                       "min-h-7": heading.depth == minDepth + 2,
+                   },
+               ]}
+            >
                 <div class:list={["transition w-5 h-5 shrink-0 rounded-lg text-xs flex items-center justify-center font-bold",
                     {
                         "bg-[var(--toc-badge-bg)] text-[var(--btn-content)]": heading.depth == minDepth,
@@ -50,9 +56,10 @@ const maxLevel = siteConfig.toc.depth;
                     {heading.depth == minDepth + 1 && <div class="transition w-2 h-2 rounded-[0.1875rem] bg-[var(--toc-badge-bg)]"></div>}
                     {heading.depth == minDepth + 2 && <div class="transition w-1.5 h-1.5 rounded-sm bg-black/5 dark:bg-white/10"></div>}
                 </div>
-                <div class:list={["toc-text transition text-sm truncate min-w-0", {
-                    "text-50": heading.depth == minDepth || heading.depth == minDepth + 1,
-                    "text-30": heading.depth == minDepth + 2,
+                <div class:list={["toc-text transition truncate min-w-0", {
+                    "text-sm font-bold": heading.depth == minDepth,
+                    "text-sm text-50": heading.depth == minDepth + 1,
+                    "text-xs text-30": heading.depth == minDepth + 2,
                 }]}>{removeTailingHash(heading.text)}</div>
             </a>
     )}

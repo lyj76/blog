@@ -15,9 +15,10 @@ const className = Astro.props.class;
 ---
 <div id="sidebar" class:list={[className, "w-full"]}>
     <div id="reading-sidebar-header" class="flex items-center justify-between">
-        <span class="flex items-center gap-2 text-sm font-medium text-black/50 dark:text-white/50">
+        <span id="reading-sidebar-title" class="flex items-center gap-2 text-sm font-medium text-black/50 dark:text-white/50 cursor-pointer select-none transition hover:text-black/70 dark:hover:text-white/70" title="折叠 / 展开目录树">
             <Icon name="fa6-solid:book-open" class="text-sm"></Icon>
             <span>目录</span>
+            <Icon name="material-symbols:expand-more-rounded" id="reading-sidebar-chevron" class="text-sm transition-transform duration-300"></Icon>
         </span>
         <button id="reading-sidebar-toggle" aria-label="Collapse sidebar"
                 class="btn-plain rounded-lg h-8 w-8 text-black/50 dark:text-white/50"
