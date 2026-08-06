@@ -10,38 +10,7 @@ category: HuggingFace
 
 调用 `model(input_ids=..., labels=...)` 后，返回的不是张量，而是一个带多个字段的对象。理解这个对象的契约，才能知道「loss 从哪来、logits 长什么样、什么时候有 past_key_values」。
 
-## 1. CausalLMOutputWithPast：返回类型
-
-模型直接调用（`__call__` → `forward`）返回 `CausalLMOutputWithPast` 对象：
-
-```python title="forward-output.py"
-outputs = model(input_ids=input_ids, labels=labels)
-type(outputs)   # transformers.modeling_outputs.CausalLMOutputWithPast
-
-outputs.loss              # tensor(2.3456)，交叉熵损失
-outputs.logits            # tensor[batch, seq, vocab]，每个位置的词表分布
-outputs.past_key_values   # tuple of tuples，KV 缓存（推理加速用）
-```
-
-这个对象是数据类，字段表如下：
-
-| 字段 | 类型 | 何时有值 |
-| --- | --- | --- |
-| `loss` | `Optional[torch.Tensor]` | **传了 `labels` 才有**，否则为 `None` |
-| `logits` | `torch.Tensor` | 永远有，形状 `[batch, seq, vocab_size]` |
-| `past_key_values` | `Optional[Tuple]` | `use_cache=True` 时有，KV 缓存 |
-| `hidden_states` | `Optional[Tuple[Tensor]]` | `output_hidden_states=True` 时有 |
-| `attentions` | `Optional[Tuple[Tensor]]` | `output_attentions=True` 时有 |
-
-- `loss` 和 `logits` 是最常用的两个字段
-- `past_key_values`、`hidden_states`、`attentions` 默认不返回，需要显式开启
-- 这个对象可以当命名元组用：`outputs.logits` 或 `outputs["logits"]` 都行
-
-::::note
-**不是所有字段都有值**：`loss` 只在传 `labels` 时计算；`past_key_values` 只在 `use_cache=True` 时返回。不传 labels 时 `outputs.loss` 是 `None`，但 `outputs.logits` 永远有。
-::::
-
-## 2. forward 的参数契约：input_ids / attention_mask / labels
+## 1. forward 的参数契约：input_ids / attention_mask / labels
 
 `forward` 接收的关键参数就这几个（所有 HF CausalLM 模型遵循同一签名）：
 
@@ -54,7 +23,66 @@ outputs.past_key_values   # tuple of tuples，KV 缓存（推理加速用）
 | `labels` | 目标 token 序列（标准答案） | `[batch, seq]` | **训练时传** |
 
 - **为什么必须用关键字参数调用**：`forward` 参数多、顺序固定——`labels` 排在第六位，第二位是 `attention_mask`。写 `model(input_ids, labels)` 位置调用会把 labels 错塞给 `attention_mask`，**不报错但行为完全错误**。所以 HF 生态永远写 `model(input_ids=..., labels=...)`（参数语法见 Python「函数参数与解包」篇）
-- **两种调用形态**：不传 `labels` 是推理形态（只算 logits）；传 `labels` 是训练形态（内部自动算交叉熵，返回带 `loss` 的对象）——详见下一节
+- **两种调用形态**：不传 `labels` 是推理形态（只算 logits）；传 `labels` 是训练形态（内部自动算交叉熵，返回带 `loss` 的对象）——详见第 3 节
+
+## 2. CausalLMOutputWithPast：返回类型
+
+模型直接调用（`__call__` → `forward`）返回 `CausalLMOutputWithPast` 对象：
+
+```python title="forward-output.py"
+outputs = model(input_ids=input_ids, labels=labels)
+type(outputs)   # transformers.modeling_outputs.CausalLMOutputWithPast
+
+outputs.loss              # tensor(2.3456)，交叉熵损失
+outputs.logits            # tensor[batch, seq, vocab]，每个位置的词表分布
+outputs.past_key_values   # tuple of tuples，KV 缓存（推理加速用）
+```
+
+这个对象是**数据类（`ModelOutput`）**——既能当属性访问（`outputs.loss`），也能当字典访问（`outputs["loss"]`），两种写法等价。字段表如下：
+
+| 字段 | 类型 | 何时有值 |
+| --- | --- | --- |
+| `loss` | `Optional[torch.Tensor]` | **传了 `labels` 才有**，否则为 `None` |
+| `logits` | `torch.Tensor` | 永远有，形状 `[batch, seq, vocab_size]` |
+| `past_key_values` | `Optional[Tuple]` | `use_cache=True` 时有，KV 缓存 |
+| `hidden_states` | `Optional[Tuple[Tensor]]` | `output_hidden_states=True` 时有 |
+| `attentions` | `Optional[Tuple[Tensor]]` | `output_attentions=True` 时有 |
+
+- `loss` 和 `logits` 是最常用的两个字段
+- `past_key_values`、`hidden_states`、`attentions` 默认不返回，需要显式开启
+
+### 字段类型到底是什么意思
+
+`loss` 的类型标注 `Optional[torch.Tensor]` 拆开看是两部分：
+
+| 部分 | 含义 |
+| --- | --- |
+| `torch.Tensor` | **张量**：带形状、dtype 的多维数组（结构详见「Tensor 与 nn.Parameter」篇） |
+| `Optional[X]` | Python 类型注解，= `X \| None`：**这个字段可能有值，也可能是空（`None`）** |
+
+所以 `Optional[torch.Tensor]` 直译就是："**这个字段要么是个张量，要么是 `None`**"——`loss` 在没传 `labels` 时就是 `None`，**用之前必须判空**：
+
+```python title="loss-guard.py"
+if outputs.loss is not None:      # 训练时才有值
+    loss = outputs.loss.item()    # .item()：张量 → Python 浮点数
+```
+
+**张量（torch.Tensor）能干什么**——loss 和 logits 都是它，操作完全通用：
+
+| 操作 | 例子 | 用途 |
+| --- | --- | --- |
+| 看形状 / 类型 | `t.shape`、`t.dtype` | 调试、确认维度 |
+| 转 Python 标量 | `loss.item()` | 打日志、记录训练指标 |
+| 反向传播 | `loss.backward()` | 训练 |
+| 索引 / 切片 | `logits[:, -1, :]` | 取最后一个位置的 logits（生成时） |
+| 取最大值位置 | `logits.argmax(dim=-1)` | 得到预测的 token id |
+| 转概率分布 | `logits.softmax(dim=-1)` | 采样 / 分析置信度 |
+
+（`.item()` 见「设备与精度」篇，张量的形状与操作见「张量形状、转置与切片」篇。）
+
+::::note
+**不是所有字段都有值**：`loss` 只在传 `labels` 时计算；`past_key_values` 只在 `use_cache=True` 时返回。不传 labels 时 `outputs.loss` 是 `None`，但 `outputs.logits` 永远有——所以推理代码可以放心用 logits，用 loss 前要判空。
+::::
 
 ## 3. labels 与 loss：内部自动算交叉熵
 
