@@ -86,7 +86,19 @@ y2 = model.forward(x)    # 不推荐：跳过钩子
 | `.state_dict()` | 返回 `_parameters` 与缓冲区（buffer）的键值快照，用于保存与加载 |
 | `.device` | ⚠️ 没有这个属性；设备信息要通过参数的 `.device` 获取 |
 
-### train() / eval() 到底做了什么
+**按参数重建线性层**（LoRA 合并权重时常用）：用已有层的维度/设备/精度创建同构新层：
+
+```python title="recreate-linear.py"
+new_linear = nn.Linear(
+    in_features=orig_linear.in_features,       # 输入维度保持一致
+    out_features=orig_linear.out_features,     # 输出维度保持一致
+    bias=orig_linear.bias is not None,         # 是否带偏置
+    device=W0.device,                          # 设备一致（cuda/cpu）
+    dtype=W0.dtype                             # 精度一致（float32 / bfloat16）
+)
+```
+
+## 4. train() / eval() 到底做了什么
 
 ```python title="train-eval.py"
 model.train()   # 递归把所有子模块的 training 标志设为 True
@@ -102,19 +114,7 @@ model.eval()    # 递归把所有子模块的 training 标志设为 False
 **`eval()` 不关梯度**：`eval()` 只改 `training` 标志，**不**停止梯度计算。推理时省显存要靠 `with torch.no_grad():`（见"自动求导与梯度"篇）——两者配合才是完整推理姿势。
 ::::
 
-**按参数重建线性层**（LoRA 合并权重时常用）：用已有层的维度/设备/精度创建同构新层：
-
-```python title="recreate-linear.py"
-new_linear = nn.Linear(
-    in_features=orig_linear.in_features,       # 输入维度保持一致
-    out_features=orig_linear.out_features,     # 输出维度保持一致
-    bias=orig_linear.bias is not None,         # 是否带偏置
-    device=W0.device,                          # 设备一致（cuda/cpu）
-    dtype=W0.dtype                             # 精度一致（float32 / bfloat16）
-)
-```
-
-## 4. 几个重要的迭代器
+## 5. 几个重要的迭代器
 
 `nn.Module` 提供了一整套「树形遍历」迭代器，按粒度从大到小：
 
