@@ -8,9 +8,40 @@ category: HuggingFace
 
 # HuggingFace Tokenizer 类型契约：输入输出结构全解
 
-Tokenizer 负责「文本 ↔ token id」互转。理解它每种调用「返回什么类型、有哪些字段、内部怎么处理」，是看懂任何 transformers 代码的第一步。
+Tokenizer 负责「文本 ↔ token id」互转。理解它「怎么加载、每种调用返回什么类型、有哪些字段、内部怎么处理」，是看懂任何 transformers 代码的第一步。
 
-## 1. BatchEncoding：tokenizer 调用的返回类型
+> 归属：**`transformers` 库**（`from transformers import AutoTokenizer`）——HF 的模型库，和 `datasets`（数据）、PyTorch（训练引擎）平级。
+
+## 1. 加载：AutoTokenizer.from_pretrained()
+
+训练脚本里拿到 tokenizer 的唯一入口——**和模型共用同一个路径**：
+
+```python title="tokenizer-load.py"
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)   # 本地路径或 Hub id
+```
+
+- `MODEL_PATH` 可以是**本地文件夹**（如 `"./Qwen2.5-0.5B-Instruct"`），也可以是 **HF Hub 仓库 id**（如 `"Qwen/Qwen2.5-0.5B-Instruct"`）——和 `AutoModelForCausalLM.from_pretrained` 用同一个值，两者**成对出现**
+- **它读的是词表文件，不是权重**：`tokenizer_config.json`（配置）+ `vocab.json` / `merges.txt` / `tokenizer.json`（词表与合并规则）
+- 所以加载**又轻又快**（几 MB，没有权重）——先加载 tokenizer 检查数据、再加载模型，是排查问题的标准姿势
+
+**加载后立刻做的三件事**：
+
+```python title="post-load.py"
+tokenizer.pad_token_id is None          # ① 检查有没有 pad_token（很多 LLM 没有）
+if tokenizer.pad_token_id is None:      # ② 没有就用 eos 兜底（见第 5 节）
+    tokenizer.pad_token = tokenizer.eos_token
+tokenizer.save_pretrained(save_dir)     # ③ 需要时保存（和模型成对，见下）
+```
+
+**保存是加载的逆操作**：`tokenizer.save_pretrained(dir)` 把词表文件写进文件夹，和 `model.save_pretrained(dir)` **成对使用**——**模型文件里不包含分词器**，部署/迁移时要单独带上。
+
+::::note
+**Auto 机制细节见「Auto 机制与模型加载」篇**：`AutoTokenizer` 按仓库里的配置自动选对具体实现类（如 Qwen 的 `Qwen2Tokenizer`）——你不需要知道用哪个类，只传路径即可。
+::::
+
+## 2. BatchEncoding：tokenizer 调用的返回类型
 
 直接调用 tokenizer 时，返回值不是普通字典，而是 `BatchEncoding` 对象：
 
@@ -31,7 +62,7 @@ out.to("cuda")          # 当 value 是张量时，一次性搬到 GPU
 **`BatchEncoding` 不是普通 `dict`**：它继承 `UserDict`，行为像字典，但多了 `.to(device)`、`.convert_to_tensors()` 等方法。当字典用没问题，但要知道它有额外能力。
 ::::
 
-## 2. 三种调用的返回类型对比
+## 3. 三种调用的返回类型对比
 
 Tokenizer 有三种常见调用方式，返回类型完全不同：
 
@@ -65,7 +96,7 @@ inputs["attention_mask"]   # tensor([[1, 1, 1, 1]])
 **什么时候用哪个**：训练数据构造用 `encode`，你要的是裸 id，方便自己拼接 prompt + target、做 `-100` 掩码；推理或喂模型用直接调用 + `return_tensors="pt"`，模型需要张量输入和 `attention_mask`。
 ::::
 
-## 3. 参数体系：padding / truncation / max_length
+## 4. 参数体系：padding / truncation / max_length
 
 直接调用 tokenizer 时，常用参数控制输出结构：
 
@@ -96,7 +127,7 @@ inputs["attention_mask"]   # tensor([[1, 1, 1, 1, 0, 0],
 - `add_special_tokens=False`：拼接 prompt + target 时手动控制，避免重复加特殊 token
 - `max_length` 和 `truncation` 配合：模型有最大序列长度（如 2048 / 4096），超了必须截断
 
-## 4. 特殊 token 体系
+## 5. 特殊 token 体系
 
 每个 tokenizer 持有四个特殊 token 的 id：
 
@@ -126,7 +157,7 @@ if tokenizer.pad_token_id is None:
 把结束符当填充符用，是 LLM 训练脚本的标配写法。
 ::::
 
-## 5. padding_side：填充方向与生成的意义
+## 6. padding_side：填充方向与生成的意义
 
 ```python title="padding-side.py"
 tokenizer.padding_side = "left"   # 左填充：pad 加在序列开头
@@ -140,7 +171,7 @@ tokenizer.padding_side = "right"  # 右填充：pad 加在序列末尾（默认�
 **为什么生成要左填充**：decoder-only 模型从序列末尾往后生成新 token。如果右填充，真实文本后面跟着 pad，模型会在 pad 后面生成，位置错乱。左填充保证真实 token 紧贴序列末尾，新生成的 token 自然接在后面。
 ::::
 
-## 6. attention_mask 的两个作用
+## 7. attention_mask 的两个作用
 
 `attention_mask` 是一个全 0/1 的序列，长度和 `input_ids` 相同：
 
@@ -164,6 +195,8 @@ attention_mask  = [1,   1, 1, 1,   0,   0]
 
 | 语法 | 返回类型 | 用途 |
 | --- | --- | --- |
+| `AutoTokenizer.from_pretrained(path)` | `Tokenizer` 实例 | 加载（读词表文件，非权重） |
+| `tokenizer.save_pretrained(dir)` | 写词表文件 | 保存（和模型成对） |
 | `tokenizer.encode(text)` | `list[int]` | 拿裸 id 做数据构造 |
 | `tokenizer(text)` | `BatchEncoding`（list 值） | 完整处理结果 |
 | `tokenizer(text, return_tensors="pt")` | `BatchEncoding`（tensor 值） | 喂模型 |

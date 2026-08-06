@@ -10,6 +10,8 @@ category: PyTorch
 
 数据管线由两层组成：**`Dataset` 定义「怎么取一个样本」，`DataLoader` 负责「批量、打乱、并行取」**。两者配合构成完整的训练数据流。
 
+> 归属：**PyTorch · `torch.utils.data`** —— 数据接口层（`from torch.utils.data import Dataset, DataLoader`）。
+
 ## 1. 一句话理解 Dataset
 
 `Dataset` 是 PyTorch 对「数据集」的抽象：**通过索引访问样本**——`dataset[i]` 返回第 `i` 个样本，通常是 `(输入, 标签)` 元组。

@@ -10,6 +10,8 @@ category: HuggingFace
 
 `model.generate()` 是 HuggingFace 的文本生成入口。它内部跑一个自回归循环：预测下一个 token，拼回输入，再预测，直到停止。理解这个循环和返回值的结构，才能控制生成行为、正确取出结果。
 
+> 归属：**`transformers` 库** —— 生成方法（`model.generate()`）属于 HF 模型。
+
 ## 1. generate() 的本质：自回归循环
 
 ```python title="autoregressive.py"

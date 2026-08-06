@@ -10,6 +10,8 @@ category: Python
 
 训练脚本里打印 loss、参数量、进度，几乎都用 f-string。这篇讲清楚 `{}` 里能放什么、`:` 后面的格式说明符怎么写，以及 `flush=True` 在服务端日志里的作用。
 
+> 归属：**Python 标准库** —— 语言本身。
+
 ## 1. 基础：`f"..."` + `{变量}`
 
 ```python title="fstring-basic.py"

@@ -10,6 +10,8 @@ category: HuggingFace
 
 `Auto` 前缀的类是 HuggingFace 的工厂入口：传一个模型路径，它自动选对实现类，把权重加载好。理解这套机制，才能知道「加载完拿到的是什么东西、config 里有什么」。
 
+> 归属：**`transformers` 库**（`from transformers import AutoModelForCausalLM`）——HF 的模型库。
+
 ## 1. Auto 前缀的本质
 
 `AutoTokenizer` 和 `AutoModelForCausalLM` 不是具体的实现类，而是**工厂类**：

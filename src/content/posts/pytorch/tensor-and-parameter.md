@@ -8,6 +8,8 @@ category: PyTorch
 
 # PyTorch 核心：Tensor 与 nn.Parameter
 
+> 归属：**PyTorch · `torch`** —— 张量与自动求导是 PyTorch 的地基，和 HF 的 `transformers` / `datasets` 平级。
+
 ## 1. torch.Tensor 的核心属性
 
 | 属性 | 类型 | 解释 | 默认值 |

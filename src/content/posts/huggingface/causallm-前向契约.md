@@ -10,6 +10,8 @@ category: HuggingFace
 
 调用 `model(input_ids=..., labels=...)` 后，返回的不是张量，而是一个带多个字段的对象。理解这个对象的契约，才能知道「loss 从哪来、logits 长什么样、什么时候有 past_key_values」。
 
+> 归属：**`transformers` 库**（`from transformers import AutoModelForCausalLM`）——HF 的模型库。
+
 ## 1. forward 的参数契约：input_ids / attention_mask / labels
 
 `forward` 接收的关键参数就这几个（所有 HF CausalLM 模型遵循同一签名）：

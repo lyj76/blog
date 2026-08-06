@@ -10,6 +10,8 @@ category: HuggingFace
 
 `load_dataset` 是数据管线**最上游**的入口：把数据从 HuggingFace Hub（或本地文件）拿进程序。它属于 **`datasets` 库**——和 `transformers` 平级但分工不同：`transformers` 管模型，`datasets` 管数据。
 
+> 归属：**`datasets` 库**（`from datasets import load_dataset`）——HF 的数据库，和 `transformers`（模型）平级。
+
 ## 1. 定位：它在数据管线里的位置
 
 先看全图，明白这篇讲的是哪一层：

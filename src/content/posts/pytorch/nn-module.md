@@ -10,6 +10,8 @@ category: PyTorch
 
 `nn.Module` 是所有神经网络层与模型的基类。理解它的「自动注册」机制，是掌握 PyTorch 模型管理的一把钥匙。
 
+> 归属：**PyTorch · `torch.nn`** —— 模型构建层（`import torch.nn as nn`）。
+
 ## 1. 自动注册机制
 
 自定义层时**必须**调用 `super().__init__()`：
@@ -84,19 +86,25 @@ y2 = model.forward(x)    # 不推荐：跳过钩子
 | --- | --- |
 | `.training` | 布尔值，由 `train()` / `eval()` 切换，影响 BatchNorm / Dropout 的行为 |
 | `.state_dict()` | 返回 `_parameters` 与缓冲区（buffer）的键值快照，用于保存与加载 |
-| `.device` | ⚠️ 没有这个属性；设备信息要通过参数的 `.device` 获取 |
+| `.device` / `.dtype` | ⚠️ **都没有**；设备与精度是**张量的属性**，要通过参数获取（`linear.weight.device` / `linear.weight.dtype`） |
 
 **按参数重建线性层**（LoRA 合并权重时常用）：用已有层的维度/设备/精度创建同构新层：
 
 ```python title="recreate-linear.py"
+W0 = orig_linear.weight.detach()   # ① 先取出参数张量（W0 是 Tensor）
+
 new_linear = nn.Linear(
-    in_features=orig_linear.in_features,       # 输入维度保持一致
-    out_features=orig_linear.out_features,     # 输出维度保持一致
+    in_features=orig_linear.in_features,       # 输入维度保持一致（模块属性：有）
+    out_features=orig_linear.out_features,     # 输出维度保持一致（模块属性：有）
     bias=orig_linear.bias is not None,         # 是否带偏置
-    device=W0.device,                          # 设备一致（cuda/cpu）
-    dtype=W0.dtype                             # 精度一致（float32 / bfloat16）
+    device=W0.device,                          # ② 设备：从张量 W0 上取（模块没有 .device）
+    dtype=W0.dtype                             # ③ 精度：从张量 W0 上取（模块没有 .dtype）
 )
 ```
+
+::::warning
+**`.dtype` / `.device` 在张量上，不在模块上**：`nn.Linear` 本身**没有** `.dtype` 和 `.device` 属性（`orig_linear.dtype` 会报 `AttributeError`）。它们属于**参数张量**——正确写法是 `orig_linear.weight.dtype`。示例里写成 `W0.dtype`，因为 `W0 = orig_linear.weight.detach()` 是张量。模块能直接访问的只有维度这类配置属性（`in_features` / `out_features`）。
+::::
 
 ## 4. train() / eval() 到底做了什么
 
