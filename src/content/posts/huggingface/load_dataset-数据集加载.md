@@ -1,12 +1,12 @@
 ---
-title: HuggingFace load_dataset 数据加载：数据来源与类型契约
+title: load_dataset 数据加载：数据来源与类型契约
 published: 2026-08-06
 description: datasets 库 load_dataset 的参数契约（仓库 id / split / streaming 各填什么）、返回的三种数据结构本体（DatasetDict 是 dict、Dataset 是可索引的表、IterableDataset 是迭代器）、为什么能当 dataset 用（__getitem__/__len__/__iter__ 协议）、流式 vs 普通的过程、转 PyTorch Dataset 的桥
 tags: [HuggingFace, datasets, load_dataset, 数据结构]
 category: HuggingFace
 ---
 
-# HuggingFace load_dataset 数据加载：数据来源与类型契约
+# load_dataset 数据加载：数据来源与类型契约
 
 `load_dataset` 是数据管线**最上游**的入口：把数据从 HuggingFace Hub（或本地文件）拿进程序。它属于 **`datasets` 库**——和 `transformers` 平级但分工不同：`transformers` 管模型，`datasets` 管数据。
 

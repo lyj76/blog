@@ -1,12 +1,12 @@
 ---
-title: HuggingFace Auto 机制与模型加载：from_pretrained 全流程
+title: Auto 机制与模型加载：from_pretrained 全流程
 published: 2026-08-05
 description: Auto 前缀工厂机制、AutoTokenizer vs AutoModel vs AutoModelForCausalLM 家族区别、model.config 结构与 getattr 安全读取、from_pretrained 完整流程、torch_dtype 精度选择、model.to(device)
 tags: [HuggingFace, transformers, AutoModel, from_pretrained]
 category: HuggingFace
 ---
 
-# HuggingFace Auto 机制与模型加载：from_pretrained 全流程
+# Auto 机制与模型加载：from_pretrained 全流程
 
 `Auto` 前缀的类是 HuggingFace 的工厂入口：传一个模型路径，它自动选对实现类，把权重加载好。理解这套机制，才能知道「加载完拿到的是什么东西、config 里有什么」。
 

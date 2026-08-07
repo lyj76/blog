@@ -206,6 +206,10 @@ for epoch in range(1, 4):                      # 外层：多轮
         print(f"Epoch [{epoch}/3] | Step [{step+1}/{len(dataloader)}] | Loss: {loss.item():.4f}")
 ```
 
+::::note
+**想实时看训练进度？** 用 `tqdm` 包住 dataloader——`for batch in tqdm(dataloader, desc="...")` 自动显示进度 / 耗时 / 剩余时间，比 `print` 清晰得多，还能做 epoch + batch 双层进度条（用法见 [[tqdm-进度条]]）。
+::::
+
 ## 5. 常见问题
 
 - **`shuffle=True` 只对训练集用**：验证/测试集保持顺序，否则指标不可比

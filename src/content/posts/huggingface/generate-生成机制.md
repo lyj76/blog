@@ -1,12 +1,12 @@
 ---
-title: HuggingFace generate() 生成机制：自回归循环
+title: generate() 生成机制：自回归循环
 published: 2026-08-05
 description: 先讲最基础的输入输出模式 model(input_ids) 返回 logits、一次前向同时预测所有位置的下一个 token、生成 = 把预测拼回输入（输出 = input_ids + answer）、generate() 打包自回归循环、greedy vs sampling、停止条件、切片剥离 prompt、KV 缓存
 tags: [HuggingFace, transformers, generate, 自回归生成, KV缓存]
 category: HuggingFace
 ---
 
-# HuggingFace generate() 生成机制：自回归循环
+# generate() 生成机制：自回归循环
 
 `model.generate()` 是文本生成入口。要理解它，先得明白**最基础的输入输出模式**：`model(input_ids)` 一次前向返回什么。这篇从地基讲起，一路到完整的生成循环。
 
@@ -109,20 +109,43 @@ for _ in range(3):                      # 手动生成 3 个 token（示意）
 
 **核心认知**：生成的结果**天然包含 prompt**——因为每一轮都把新 token 拼回输入，最终张量 = 原始 `input_ids` 后面接着生成的部分。所以取结果时要"剥掉 prompt"（见第 6 节）。
 
-## 3. generate()：把上面的循环打包
+## 3. generate()：把第 2 节的循环打包
 
-`model.generate()` 就是把这个循环封装成一行（内部做了采样策略、停止判断、KV 缓存等）：
+`model.generate()` 就是把**第 2 节那个手写循环**（取最后位置 → 选 token → 拼回 → 重复）打包成一次调用。你只管描述"要什么"，它内部替你跑循环，并处理三件事：**采样策略**（选 token 的方式，第 4 节）、**停止判断**（何时停，第 5 节）、**KV 缓存**（每步只算新 token，第 7 节）。
+
+**输入**——逐个传关键字参数，每个参数是什么一目了然：
 
 ```python title="generate-call.py"
-outputs = model.generate(**inputs, max_new_tokens=30, eos_token_id=eos_id)
+outputs = model.generate(
+    input_ids=input_ids,              # ① prompt 的 token id 张量（torch.Tensor），形状 [batch, prompt_len]（必传）
+    attention_mask=attention_mask,    # ② 0/1 张量，标记真实/pad 位，和 input_ids 同形状（有 padding 必传）
+    max_new_tokens=30,                # ③ 最多生成 30 个【新】token
+    eos_token_id=eos_id,              # ④ 生成到结束符就停
+)
 ```
 
-- `**inputs` 是字典解包（`input_ids` + `attention_mask` 展开成关键字参数，见 [[函数参数与解包]]）
-- `outputs` 就是第 2 节最终的完整序列 `[batch, prompt_len + new_tokens]`
+**`attention_mask` 是什么**：和 `input_ids` 等长的 0/1 序列，1 = 真实 token、0 = 填充位——由 tokenizer 在 padding 时生成。**生成本体不讲这里**，作用详解见 [[tokenizer-类型契约#8-attention_mask-的两个作用]]；生成时 batch 用左填充（保证真实 token 贴序列末尾）见 [[tokenizer-类型契约#7-padding_side填充方向与生成的意义]]。单条输入没有 padding 时全是 1，传不传都一样，但养成传的习惯更安全。
+
+**输出**——返回一个 `torch.Tensor`，不是文本、也不是带字段的对象：
+
+| 属性 | 值 |
+| --- | --- |
+| 类型 | `torch.Tensor`（普通张量） |
+| 元素 | **token id**（int） |
+| 形状 | `[batch, prompt_len + new_tokens]`——**即使 batch=1 也是二维 `[1, ...]`**，不会降成一维（`generate()` 内部按批次处理，batch 维从 tokenizer 的 `[1, n]` 一路保留） |
+| 内容 | **prompt + answer**——和第 2 节手写循环完全一致：每轮把新 token 拼回输入，最终 = 原始 input_ids 后面接着生成的部分 |
+
+```python title="generate-output.py"
+print(type(outputs))                    # <class 'torch.Tensor'>
+print(outputs.shape)                    # torch.Size([1, 7])  ← prompt 4 个 + 新生成 3 个
+text = tokenizer.decode(outputs[0], skip_special_tokens=True)   # token id → 文本
+```
+
+- `**inputs` 是**捷径写法**：tokenizer 返回的字典里正好有 `input_ids` 和 `attention_mask`，`model.generate(**inputs, max_new_tokens=30)` 等价于把这两个键展开成上面的关键字参数（解包语法见 [[函数参数与解包]]）。想看清每个参数时用展开写；确认行为无误后日常用 `**inputs` 更省事
 - 内部默认在 `torch.no_grad()` 下运行（推理不建计算图，见 [[自动求导与梯度]]）
 
 ::::note
-**generate() 不是一次出全部 token**：它每一步只生成一个 token（每步一次前向）。生成 100 个 token 要跑 100 次前向——KV 缓存让每次前向只算新 token（见第 7 节）。
+**generate() 不是一次出全部 token**：它内部仍是"每步一个 token、每步一次前向"的循环，只是你看不见。生成 100 个 token 要跑 100 次前向——KV 缓存让每次前向只算新 token（见第 7 节）。
 ::::
 
 ## 4. greedy vs sampling：选 token 的策略
@@ -131,11 +154,17 @@ outputs = model.generate(**inputs, max_new_tokens=30, eos_token_id=eos_id)
 
 ```python title="decoding-strategy.py"
 # greedy：每步取分数最高的 token（确定性）
-outputs = model.generate(**inputs, do_sample=False, max_new_tokens=30)
+outputs = model.generate(
+    input_ids=input_ids,
+    attention_mask=attention_mask,
+    do_sample=False,
+    max_new_tokens=30,
+)
 
 # sampling：按概率分布随机采样（多样性）
 outputs = model.generate(
-    **inputs,
+    input_ids=input_ids,
+    attention_mask=attention_mask,
     do_sample=True,
     temperature=0.7,    # 缩放 logits，越高越随机
     top_p=0.9,          # 只从累积概率前 90% 的 token 里采样
@@ -163,7 +192,8 @@ outputs = model.generate(
 
 ```python title="stop-conditions.py"
 outputs = model.generate(
-    **inputs,
+    input_ids=input_ids,
+    attention_mask=attention_mask,
     max_new_tokens=30,      # 最多生成 30 个新 token
     eos_token_id=eos_id,    # 遇到结束符就停
 )
@@ -187,11 +217,11 @@ outputs = model.generate(
 因为"输出 = input_ids + answer"（第 2 节），取结果时要剥掉 prompt 部分：
 
 ```python title="outputs-slice.py"
-# inputs.input_ids 形状 [1, prompt_len]
+# input_ids 形状 [1, prompt_len]
 # outputs 形状 [1, prompt_len + new_tokens]
 
-prompt_len = inputs.input_ids.shape[1]        # prompt 的 token 数
-generated_tokens = outputs[0][prompt_len:]    # 切出新生成部分（跳过 prompt）
+prompt_len = input_ids.shape[1]            # prompt 的 token 数（input_ids 就是原始 prompt）
+generated_tokens = outputs[0][prompt_len:]  # 切出新生成部分（跳过 prompt）
 
 text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 ```
@@ -268,7 +298,11 @@ import torch
 @torch.no_grad()
 def generate_text(model, tokenizer, prompt, device, max_new_tokens=30):
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+    outputs = model.generate(
+        input_ids=inputs["input_ids"],        # tokenizer 返回的字典里有这两项
+        attention_mask=inputs["attention_mask"],
+        max_new_tokens=max_new_tokens,
+    )
     return outputs
 ```
 
@@ -281,7 +315,7 @@ def generate_text(model, tokenizer, prompt, device, max_new_tokens=30):
 | --- | --- |
 | `model(input_ids)` | 一次前向 → logits `[batch, seq, vocab]`，每个位置预测下一个 token |
 | 生成循环 | 取最后位置 → 采样 → 拼回输入 → 重复（**输出 = input_ids + answer**） |
-| `model.generate(**inputs, ...)` | 把自回归循环打包成一行 |
+| `model.generate(input_ids=..., max_new_tokens=...)` | 把第 2 节的循环打包；返回 `torch.Tensor`（token id，形状 `[batch, prompt_len+new_tokens]`，含 prompt） |
 | `do_sample=False` / `True` | greedy（argmax） vs 按概率采样 |
 | `max_new_tokens=N` / `eos_token_id=...` | 停止条件（上限 / 自然停止） |
 | `outputs[0][prompt_len:]` | 切片剥离 prompt，取 answer |

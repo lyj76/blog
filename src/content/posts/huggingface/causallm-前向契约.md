@@ -1,12 +1,12 @@
 ---
-title: HuggingFace CausalLM 前向契约：model() 返回什么
+title: CausalLM 前向契约：model() 返回什么
 published: 2026-08-05
 description: forward 参数契约（关键字调用陷阱）、CausalLMOutputWithPast 字段表、labels 触发内部交叉熵的完整流程（logits 对齐 → 展平 → ignore_index 求平均）、shift 一位的位置对齐机制（位置 n 预测 n+1，末位输出丢弃）、-100 在 SFT 里的掩码用法、logits[batch, seq, vocab] 作为 seq 个并列分类任务的视角、train/eval、**inputs 解包
 tags: [HuggingFace, transformers, CausalLM, 前向传播, loss]
 category: HuggingFace
 ---
 
-# HuggingFace CausalLM 前向契约：model() 返回什么
+# CausalLM 前向契约：model() 返回什么
 
 调用 `model(input_ids=..., labels=...)` 后，返回的不是张量，而是一个带多个字段的数据包。理解这个数据包的契约，才能知道「loss 从哪来、logits 长什么样、什么时候有 past_key_values」。这篇按 forward 的执行顺序展开：参数进来 → 内部算 loss → 返回字段 → 模式切换。
 
