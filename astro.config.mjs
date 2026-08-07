@@ -19,12 +19,13 @@ import remarkMath from "remark-math";
 import remarkSectionize from "remark-sectionize";
 import { expressiveCodeConfig } from "./src/config.ts";
 import { pluginLanguageBadge } from "./src/plugins/expressive-code/language-badge.ts";
-import { AdmonitionComponent } from "./src/plugins/rehype-component-admonition.mjs";
+import { AdmonitionComponent, ProofComponent } from "./src/plugins/rehype-component-admonition.mjs";
 import { GithubCardComponent } from "./src/plugins/rehype-component-github-card.mjs";
 import { parseDirectiveNode } from "./src/plugins/remark-directive-rehype.js";
 import { remarkExcerpt } from "./src/plugins/remark-excerpt.js";
+import { remarkHighlightHeading } from "./src/plugins/remark-highlight-heading.js";
 import { remarkReadingTime } from "./src/plugins/remark-reading-time.mjs";
-import { remarkWikiLink } from "./src/plugins/remark-wiki-link.js";
+import { remarkWikiLink, flushWikiLinkDiagnostics } from "./src/plugins/remark-wiki-link.js";
 import { pluginCustomCopyButton } from "./src/plugins/expressive-code/custom-copy-button.js";
 
 // https://astro.build/config
@@ -103,6 +104,15 @@ export default defineConfig({
 		}),
         svelte(),
 		sitemap(),
+		{
+			// wiki 链接校验：构建结束时汇总诊断；WIKI_LINK_STRICT=true 时存在未解析/冲突直接失败（CI 用）
+			name: "wiki-link-validation",
+			hooks: {
+				"astro:build:done": () => {
+					flushWikiLinkDiagnostics({ strict: process.env.WIKI_LINK_STRICT === "true" });
+				},
+			},
+		},
 	],
 	markdown: {
 		remarkPlugins: [
@@ -113,10 +123,11 @@ export default defineConfig({
 			remarkDirective,
 			remarkSectionize,
 			parseDirectiveNode,
+			remarkHighlightHeading,
 			remarkWikiLink,
 		],
 		rehypePlugins: [
-			rehypeKatex,
+			[rehypeKatex, { output: "html" }],
 			rehypeSlug,
 			[
 				rehypeComponents,
@@ -128,6 +139,7 @@ export default defineConfig({
 						important: (x, y) => AdmonitionComponent(x, y, "important"),
 						caution: (x, y) => AdmonitionComponent(x, y, "caution"),
 						warning: (x, y) => AdmonitionComponent(x, y, "warning"),
+						proof: (x, y) => ProofComponent(x, y),
 					},
 				},
 			],

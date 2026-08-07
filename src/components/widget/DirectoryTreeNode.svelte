@@ -9,8 +9,9 @@ let tooltip: HTMLDivElement | null = null;
 // 侧边栏不在 swup 的 containers 里，DOM 不会刷新，所以必须用 store 通知。
 export const activePathStore = writable("");
 
-// 目录树整体折叠：点击侧边栏顶部的"目录"标题触发，折叠后只显示顶层文件夹。
-export const treeCollapsed = writable(false);
+// 目录树整体折叠：默认收起（只显示文件夹），点文件夹可单独展开，
+// 点侧边栏顶部的"目录"标题可整体展开/收起。
+export const treeCollapsed = writable(true);
 
 let toggleBound = false;
 function bindTreeToggle() {
@@ -92,7 +93,9 @@ export let node: FileTreeNode;
 export let currentPath: string = "";
 export let level: number = 0;
 
-let isOpen = true;
+// 初始与 treeCollapsed 默认值一致（收起）→ SSR 直接渲染收起形态，无水合闪变；
+// 订阅会在 onMount 时立即同步一次，中途展开/收起也由它接管。
+let isOpen = false;
 
 function toggle() {
 	isOpen = !isOpen;
@@ -103,6 +106,8 @@ function toggle() {
 onMount(() => {
 	activePathStore.set(currentPath);
 	bindTreeToggle();
+	// 首次加载按 store 当前值摆好 chevron（默认收起 → 旋转 180°）
+	document.getElementById("reading-sidebar-chevron")?.classList.toggle("rotate-180", get(treeCollapsed));
 	const unsub = treeCollapsed.subscribe((collapsed) => {
 		isOpen = !collapsed;
 	});

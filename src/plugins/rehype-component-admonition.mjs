@@ -31,3 +31,30 @@ export function AdmonitionComponent(properties, children, type) {
 		...children,
 	]);
 }
+
+/**
+ * amsthm 式证明块：:::proof
+ * 加粗「证明」标题 + 散文/居中数学内容 + 右对齐实心方块 ■（QED）。
+ *
+ * @param {Object} properties - The properties of the component.
+ * @param {import('mdast').RootContent[]} children - The children elements of the component.
+ * @returns {import('mdast').Parent} The created proof block.
+ */
+export function ProofComponent(properties, children) {
+	if (!Array.isArray(children) || children.length === 0)
+		return h("div", { class: "hidden" }, "Invalid proof directive. (:::proof <content> :::)");
+
+	let label = null;
+	if (properties?.["has-directive-label"]) {
+		label = children[0];
+		// biome-ignore lint/style/noParameterAssign: <check later>
+		children = children.slice(1);
+		label.tagName = "div"; // Change the tag <p> to <div>
+	}
+
+	return h("div", { class: "proof-block" }, [
+		h("div", { class: "proof-title" }, label ? label : "证明"),
+		...children,
+		h("span", { class: "proof-qed", "aria-hidden": "true" }, "■"),
+	]);
+}

@@ -14,7 +14,7 @@ category: HuggingFace
 
 ## 1. Auto 前缀的本质
 
-`AutoTokenizer` 和 `AutoModelForCausalLM` 不是具体的实现类，而是**工厂类**：
+`AutoTokenizer` 和 `AutoModelForCausalLM` 不是具体的实现类，而是**工厂类**——它替你做「根据配置选实现类」这件事。先看完整过程，再拆机制：
 
 ```python title="auto-factory.py"
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -24,12 +24,35 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
 type(model)   # <class 'transformers.models.qwen2.modeling_qwen2.Qwen2ForCausalLM'>
 ```
 
-- 传同一个路径，`Auto` 类根据模型目录里 `config.json` 的 `architectures` 字段，自动选择对应的实现类
-- `architectures` 是一个字符串列表，如 `["Qwen2ForCausalLM"]`，`Auto` 类拿这个名字去注册表里查，找到真正的类并实例化
-- 你不用记住 `Qwen2ForCausalLM`、`LlamaForCausalLM` 这些具体类名，`Auto` 帮你选
+**「根据配置选类」的完整过程**——"配置"就是模型目录里的 `config.json`：
+
+```
+模型目录/config.json（片段）：
+{
+  "architectures": ["Qwen2ForCausalLM"],   ← ① 模型自己声明"我是谁"
+  "hidden_size": 896,
+  ...
+}
+
+AutoModelForCausalLM 内部（简化）：
+AUTO_MODEL_FOR_CAUSAL_LM_MAPPING = {        ← ② 一张"名字 → 实现类"的注册表
+    "Qwen2ForCausalLM":    Qwen2ForCausalLM,
+    "LlamaForCausalLM":    LlamaForCausalLM,
+    "MistralForCausalLM":  MistralForCausalLM,
+    ...
+}
+model_class = AUTO_MODEL_FOR_CAUSAL_LM_MAPPING["Qwen2ForCausalLM"]  ← ③ 按名字查表
+model = model_class.from_pretrained(MODEL_PATH)                     ← ④ 用查到的类加载
+```
+
+- ① `architectures` 是 `config.json` 里的一个字符串列表，**模型自己声明"我是 Qwen2 架构"**
+- ② 注册表是 transformers 内部维护的「架构名 → 实现类」字典（实际按任务分多张表，此处简化）
+- ③ **"查表"就是一次普通的字典查找**——查不到会直接报错，提示该架构不在映射里
+- ④ 你写的 `AutoModelForCausalLM.from_pretrained(...)`，内部换成 `Qwen2ForCausalLM.from_pretrained(...)` 执行
+- 你不必记住 `Qwen2ForCausalLM`、`LlamaForCausalLM` 这些具体类名——查表这步 Auto 替你做了
 
 ::::note
-**工厂机制的好处**：同一份代码换模型路径就能切换 Qwen / Llama / Mistral，不用改 import。代价是看不到具体类名，调试时用 `type(model)` 查实际类型。
+**工厂机制的好处**：同一份代码换模型路径就能切换 Qwen / Llama / Mistral，不用改 import——换路径 → 换 `architectures` → 换查表结果 → 换实现类，全自动。代价是看不到具体类名，调试时用 `type(model)` 查实际类型。
 ::::
 
 ## 2. Auto 家族区别

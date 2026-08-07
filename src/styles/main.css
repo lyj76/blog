@@ -187,6 +187,42 @@ a[data-wiki-link]:hover,
     color: oklch(0.72 0.16 calc(var(--hue) + 140)) !important;
 }
 
+/* 荧光笔条目标题：## <<名称>> 由 remark-highlight-heading 标记为 hl-heading。
+ * 半透明底色 + 只包住文字宽度（fit-content），像荧光笔涂过一样醒目。 */
+.hl-heading {
+    background-color: oklch(0.86 0.14 90 / 0.55);
+    width: fit-content;
+    padding: 0.05em 0.3em;
+    border-radius: 0.25em;
+    box-shadow: 0 0 0 1px oklch(0.8 0.12 90 / 0.25);
+}
+.dark .hl-heading {
+    background-color: oklch(0.52 0.12 90 / 0.5);
+    box-shadow: 0 0 0 1px oklch(0.62 0.12 90 / 0.2);
+}
+
+/* amsthm 式证明块：:::proof
+ * 加粗「证明」标题 + 内容（散文/居中数学）+ 右对齐 ■ QED。 */
+.proof-block {
+    margin: 1em 0;
+    padding: 0.5em 1.2em 0.9em;
+    background: oklch(0.97 0.004 250 / 0.65);
+    border-left: 3px solid oklch(0.5 0.09 250);
+    border-radius: 0.35em;
+}
+.dark .proof-block {
+    background: oklch(0.3 0.008 250 / 0.5);
+    border-left-color: oklch(0.62 0.09 250);
+}
+.proof-title {
+    font-weight: 700;
+    margin-bottom: 0.45em;
+}
+.proof-block .proof-qed {
+    float: right;
+    margin: 0 0 0 0.5em;
+}
+
 /* ===== TOC 向左展开 =====
  * 展开 = 宽度加 --toc-extra 并整体左移同样距离：右缘固定、左缘向左伸入文章区。 */
 #toc-wrapper {
