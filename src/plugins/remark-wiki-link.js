@@ -123,10 +123,12 @@ function buildIndex() {
 			}
 			if (!/\.(md|mdx)$/.test(entry.name)) continue;
 			const rel = path.relative(POSTS_DIR, full).replace(/\\/g, "/").replace(/\.(md|mdx)$/, "");
+			const urlRel = rel.toLowerCase();
 			const name = entry.name.replace(/\.(md|mdx)$/, "");
-			const url = `/posts/${rel}/`;
+			const url = `/posts/${urlRel}/`;
 			put(nameMap, nameOwner, "文件名", name, url, full);
 			put(relMap, null, "相对路径", rel, url, full);
+			if (urlRel !== rel) put(relMap, null, "相对路径（小写别名）", urlRel, url, full);
 			const title = readFrontmatterTitle(full);
 			if (title) put(titleMap, titleOwner, "标题", title, url, full);
 		}

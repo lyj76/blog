@@ -171,6 +171,79 @@ parent = model.get_submodule(parent_name)
 setattr(parent, child_name, new_layer)   # 用 new_layer 替换掉旧的子模块
 ```
 
+### 实战原则：遍历 + 按名匹配 + 修改（LoRA 注入必读）
+
+**原则一：名字是点分属性路径，遍历会走到每个节点（含最内层叶子）**
+
+`named_modules()` 产出的 `name` 是**从根到该模块的属性路径**（如 `layers.0.self_attn.q_proj`），而且**树上每个有名字的模块都是一个节点**——包括被替换进去的新模块的内部。比如把 `q_proj` 换成 `LoRALinear`（里面装着原始 `Linear` 作为 `W_new`）：
+
+```
+layers.0.self_attn.q_proj        → LoRALinear（盒子）
+layers.0.self_attn.q_proj.W_new  → Linear（盒子里的原始层）
+```
+
+**两个都会被遍历到**——`q_proj.W_new` 是"盒子里的叶子"，但它同样是一个有名字的模块节点。
+
+**原则二：按名判断"要不要处理"必须精确匹配，不能用子串 `in`**
+
+```python title="match-precise.py"
+# ❌ 子串匹配：q_proj.W_new 也含 "q_proj" → 把"盒子里的叶子"误判成"待处理的盒子"
+if "q_proj" in name:
+
+# ✅ 精确叶子匹配：只认"以 .q_proj 结尾"的节点
+if name.endswith(".q_proj"):
+```
+
+子串 `in` 的三个坑（全部可复现）：
+
+| 坑 | 触发条件 | 结果 |
+| --- | --- | --- |
+| 误匹配叶子 | 遍历到 `...q_proj.W_new`（含 `q_proj`） | 把原始 `Linear` 当 `LoRALinear` 取 `.W_new` → `'Linear' object has no attribute 'W_new'` |
+| 链式双匹配 | 名字 `...q_proj.k_proj` 同时含两个目标词 | 内层循环匹配两次，`setattr` 互相覆盖 |
+| 顶层裸名 | 目标词就在根上、名字没点 | `rsplit(".", 1)` 拆不出父名 → `ValueError` |
+
+**原则三：遍历中改结构，生成器是懒的，内容会变**
+
+`named_modules()` 返回的是**生成器**（惰性）——遍历过程中 `setattr` 替换模块，生成器"看到的结构"和替换前不一样（和 [[迭代与可变集合]] 讲的"边遍历边改"是同一个坑的 module 版本）。**改前先固化快照**：
+
+```python title="snapshot-first.py"
+for name, module in list(model.named_modules()):   # list() 先全部取出来
+    ...   # 再随便改
+```
+
+**LoRA 注入的标准安全姿势**（三条原则合起来）：
+
+```python title="safe-inject.py"
+for name, module in list(model.named_modules()):          # ① 快照
+    if name.endswith(".q_proj") or name.endswith(".v_proj"):   # ② 精确叶子匹配
+        if "." in name:                                   # ③ 顶层裸名特判
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = model.get_submodule(parent_name)
+        else:
+            parent, child_name = model, name
+        setattr(parent, child_name, LoRALinear(module, r, alpha))
+```
+
+- ① `list()` 快照：遍历期间随便改结构，不依赖生成器状态
+- ② `endswith(".xxx")`：只认叶子本身，`q_proj.W_new` 不会误入
+- ③ `"." in name` 特判：目标在根上时父模块就是 `model` 自己
+
+**按名字匹配 vs 按类型匹配**：上面用 `endswith` 是按**名字**选目标——适合"只替换特定层"（如只对 q/v 注入）。另一种思路是**按类型**选：`isinstance(module, nn.Linear)` 匹配所有线性层，完全绕开名字匹配的坑（`isinstance` 原理见 [[类与属性访问#6-isinstance判断类型含子类]]）：
+
+```python title="inject-by-type.py"
+for name, module in list(model.named_modules()):
+    if isinstance(module, nn.Linear):      # 所有 Linear 都换（天然只命中叶子）
+        parent_name, child_name = name.rsplit(".", 1)
+        setattr(model.get_submodule(parent_name), child_name, LoRALinear(module, r, alpha))
+```
+
+- **按类型**（isinstance）：适合"全部替换同类层"——不用管名字，`isinstance` 只命中真正的 `nn.Linear`，`q_proj.W_new` 这类"盒子里的叶子"问题根本不存在（新替换进去的 `LoRALinear` 不是 `nn.Linear` 子类，不会二次命中）
+- **按名字**（endswith）：适合"只动特定层"——精确后缀匹配
+
+::::warning
+**"运气型正确"要不得**：子串 `in` + 直接遍历改结构，在 Qwen/Llama 这种"目标全是深层叶子、名字互不包含"的架构上恰好能跑通——换个架构（目标词是容器模块、或名字拼一起）立刻炸。匹配用精确后缀、修改前先快照，是唯一稳的写法。
+::::
+
 ### state_dict() —— 保存与加载
 
 ```python title="save-load.py"

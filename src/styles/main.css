@@ -353,7 +353,8 @@ body:not(.reading-mode) #reading-sidebar-expand {
 	border-bottom: 1px solid color-mix(in oklab, var(--btn-regular-bg) 55%, transparent);
 }
 
-@media (min-width: 1024px) {
+/* 中等桌面宽度也保持阅读导航固定；否则 sidebar 会落到正文后方，滚动后完全消失。 */
+@media (min-width: 768px) {
 	.reading-mode #sidebar {
 		position: fixed;
 		top: 4.5rem;
@@ -396,6 +397,16 @@ body:not(.reading-mode) #reading-sidebar-expand {
 		transform: translateX(calc(-100% - 2rem));
 		opacity: 0;
 		pointer-events: none;
+	}
+}
+
+/* 768–1359px：固定侧栏后给正文让出空间，避免目录覆盖文章左缘。 */
+@media (min-width: 768px) and (max-width: 1359px) {
+	.reading-mode #post-container {
+		max-width: var(--reading-content-width);
+		width: calc(100vw - 17.5rem - 3rem);
+		margin-left: calc(17.5rem + 2rem);
+		margin-right: 1rem;
 	}
 }
 
