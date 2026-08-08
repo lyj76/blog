@@ -559,7 +559,7 @@ a[data-wiki-link]:hover,
     border-radius: 0.2rem !important;
 }
 
-/* 4. 标签微型胶囊（全站 Tag 圈包围样式） */
+/* 4. 标签微型胶囊（平时中性素雅包围，悬停 Hover 时触发主题色） */
 .tag-capsule {
     display: inline-flex !important;
     align-items: center !important;
@@ -568,19 +568,26 @@ a[data-wiki-link]:hover,
     font-weight: 500 !important;
     line-height: 1.2 !important;
     border-radius: 9999px !important;
-    color: var(--primary) !important;
-    background-color: color-mix(in oklab, var(--primary) 10%, transparent) !important;
-    border: 1px solid color-mix(in oklab, var(--primary) 22%, transparent) !important;
+    color: rgba(0, 0, 0, 0.6) !important;
+    background-color: rgba(0, 0, 0, 0.03) !important;
+    border: 1px solid rgba(0, 0, 0, 0.09) !important;
     transition: all 0.2s ease !important;
     white-space: nowrap !important;
     text-decoration: none !important;
 }
 .tag-capsule:hover {
-    background-color: color-mix(in oklab, var(--primary) 20%, transparent) !important;
-    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+    background-color: color-mix(in oklab, var(--primary) 12%, transparent) !important;
+    border-color: color-mix(in oklab, var(--primary) 40%, transparent) !important;
     transform: translateY(-1px) !important;
 }
 .dark .tag-capsule {
-    background-color: color-mix(in oklab, var(--primary) 16%, transparent) !important;
-    border-color: color-mix(in oklab, var(--primary) 32%, transparent) !important;
+    color: rgba(255, 255, 255, 0.65) !important;
+    background-color: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.dark .tag-capsule:hover {
+    color: var(--primary) !important;
+    background-color: color-mix(in oklab, var(--primary) 18%, transparent) !important;
+    border-color: color-mix(in oklab, var(--primary) 50%, transparent) !important;
 }

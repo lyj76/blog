@@ -173,7 +173,7 @@
     }
 
     /* 注脚/引用：无左侧竖线，无背景色，纯净 ▶ 图标引领 */
-    blockquote {
+    blockquote:not(.admonition) {
         @apply not-italic my-5 py-1 px-0 text-neutral-500 dark:text-neutral-400 text-sm transition-all;
         background: transparent !important;
         border-left: none !important;
@@ -197,16 +197,75 @@
         }
     }
 
+    /* Admonition 警示/提示框组件 (:::note, :::warning, :::tip, :::important, :::caution) */
+    blockquote.admonition {
+        display: block !important;
+        padding: 1.1rem 1.35rem !important;
+        margin: 2.25rem 0 !important;
+        border-radius: 0.75rem !important;
+        border-left-width: 4px !important;
+        border-left-style: solid !important;
+        box-shadow: none !important;
+
+        .bdm-title {
+            display: flex !important;
+            align-items: center !important;
+            margin-top: 0 !important;
+            margin-bottom: 0.5rem !important;
+            font-weight: 700 !important;
+            font-size: 0.95rem !important;
+            line-height: 1.4 !important;
+        }
+
+        p {
+            display: block !important;
+            margin: 0.4rem 0 !important;
+            line-height: 1.75 !important;
+            color: inherit !important;
+
+            &:before {
+                content: none !important;
+            }
+        }
+    }
+
+    blockquote.admonition.bdm-note {
+        border-left-color: oklch(0.65 0.18 calc(var(--hue) + 40)) !important;
+        background-color: color-mix(in oklab, oklch(0.65 0.18 calc(var(--hue) + 40)) 8%, transparent) !important;
+    }
+    blockquote.admonition.bdm-tip {
+        border-left-color: oklch(0.7 0.18 150) !important;
+        background-color: color-mix(in oklab, oklch(0.7 0.18 150) 8%, transparent) !important;
+    }
+    blockquote.admonition.bdm-warning {
+        border-left-color: oklch(0.75 0.18 70) !important;
+        background-color: color-mix(in oklab, oklch(0.75 0.18 70) 8%, transparent) !important;
+    }
+    blockquote.admonition.bdm-important {
+        border-left-color: oklch(0.65 0.22 300) !important;
+        background-color: color-mix(in oklab, oklch(0.65 0.22 300) 8%, transparent) !important;
+    }
+    blockquote.admonition.bdm-caution {
+        border-left-color: oklch(0.65 0.22 25) !important;
+        background-color: color-mix(in oklab, oklch(0.65 0.22 25) 8%, transparent) !important;
+    }
+
     .katex-display-container,
     .katex-display {
         max-width: 100%;
         overflow-x: auto;
-        margin: 1.75em 0;
-        padding: 0.5rem 0;
+        margin: 1.1rem 0 !important;
+        padding: 0.15rem 0 !important;
         text-align: center;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
     }
     
+    /* 连续多行独立公式紧凑排版：避免多行公式之间产生 44px 的离谱推开距离 */
+    .katex-display + .katex-display,
+    .katex-display-container + .katex-display-container,
+    p:has(> .katex-display) + p:has(> .katex-display) {
+        margin-top: -0.45rem !important;
+    }
 }
