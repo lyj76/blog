@@ -121,3 +121,34 @@ Pages → 项目 → **Custom domains** → Add custom domain。域名 DNS 已�
 ## 五、已知问题（不影响部署）
 
 - **Svelte 水合错误**：`Search.svelte` / `LightDarkSwitch.svelte` / `DisplaySettings.svelte` / `DirectoryTreeNode.svelte` 在 dev 下有 `effect_orphan` / `Cannot read properties of null` 报错（控制台可见），导致搜索、主题切换、目录树交互异常。属于既有代码问题（与部署无关），修复方式：排查这些组件的 `$effect`/`onMount` 用法与 SSR 结构一致性。
+
+## 六、构建架构演进路线（文章量增长后）
+
+本站是静态站，`astro build` 每次全量生成所有页面。文章量增长时，真正的瓶颈是**每篇的 Markdown 渲染管线**（KaTeX + expressive-code + admonitions + wiki-link 逐个过），不是 wiki-link 索引（O(N) 亚秒级、有 mtime 缓存）、也不是 Pagefind（3000 篇约 8–14s）。
+
+### 三层"增量"要分清
+
+| 层次 | 是否增量 | 说明 |
+| --- | --- | --- |
+| 本地 `astro dev` | ✅ | HMR，只处理改动文件 |
+| 生产 `astro build` | ❌ | 全量渲染所有页面 |
+| Cloudflare Pages 部署 | ⚠️ | 缓存依赖和 `.astro`，但构建本身仍全量 |
+
+### 触发阈值与动作
+
+| 阶段 | 触发条件 | 动作 |
+| --- | --- | --- |
+| Stage 0 | 现在（几十篇） | **保持现状**。Git + 静态构建 + Pagefind + wiki-link 就是正确架构，不迁移 |
+| Stage 1 | 100–300 篇 | CI build 命令加 `WIKI_LINK_STRICT=true`（堵断链门禁缺口）；CF 开启 **Build cache**（缓存 `.pnpm-store` + `node_modules/.astro`）+ `NODE_VERSION=22` + **Build watch paths**；评估 `astro build --verbose` 定位 KaTeX/expressive-code 大头 |
+| Stage 2 | ~300–600 篇（全量 5–10 分钟） | **Content Layer `deferRender: true`**（避免 KaTeX 大站 eager-render 内存爆炸）；CI `actions/cache` 持久化 `.astro`；再考虑选择性增量渲染（需先解耦 `getSortedPosts()` 的 prev/next 全局变异 + 建 wiki-link 反向引用索引） |
+| Stage 3 | ~600–1000 篇（逼近 20 分钟墙） | **改由 GitHub Actions 自己构建 + `wrangler pages deploy`**（绕开 CF Pages 20 分钟构建限制，CF 只做静态托管）；首页/列表/RSS/sitemap 改 on-demand（`prerender = false`）；构建时间 >15 分钟前启动 Stage 2，别等撞墙 |
+
+### 为什么不换引擎 / 不分站
+
+- **Hugo / Zola 换过去是重写渲染引擎**：视觉层（CSS/Tailwind）可复刻，但 wiki-link、`<<荧光笔>>`、`:::proof`、KaTeX、Svelte 组件全部是 Astro/remark 生态产物，需逐个重写，代价远大于省下的构建秒数。
+- **"总站 + 分布跳转"是为组织/品牌分站，不是性能方案**：分站后 wiki-link 插件（只读单文件树）断链门禁失效、Pagefind 搜索变站内、主题要维护 N 份。**只在内容自治需求（不同库独立发布节奏/协作者）出现时才考虑**，且那也不是性能收益。
+- **20 分钟墙可绕开**：CF Pages 的限制是托管平台限制，不是技术限制。CI 自建 + wrangler 上传后墙不存在。
+
+### 推荐顺序（一句话）
+
+留在 Astro 单站 → 优先吃免费红利（strict 门禁、Build cache、deferRender、Astro 升级的 Rust 管线）→ 需要时 CI 自建绕墙 → 内容自治需求出现才分站。

@@ -33,3 +33,7 @@ yarn.lock
 # WSL symlink to ext4 node_modules (never commit)
 node_modules
 .sisyphus/
+
+# QA tooling artifacts
+.playwright-mcp/
+article-02-snapshot.md
