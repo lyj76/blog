@@ -1,4 +1,6 @@
 ---
+import { Icon } from "astro-icon/components";
+
 interface Props {
 	badge?: string;
 	url?: string;
@@ -6,18 +8,17 @@ interface Props {
 }
 const { badge, url, label } = Astro.props;
 ---
-<a href={url} aria-label={label}>
+<a href={url} aria-label={label} class="block group/link">
     <button
         class:list={`
             w-full
             h-10
-            rounded-lg
+            rounded-xl
             bg-none
             hover:bg-[var(--btn-plain-bg-hover)]
             active:bg-[var(--btn-plain-bg-active)]
             transition-all
-            pl-2
-            hover:pl-3
+            px-2.5
             
             text-neutral-700
             hover:text-[var(--primary)]
@@ -26,14 +27,16 @@ const { badge, url, label } = Astro.props;
         `
         }
     >
-        <div class="flex items-center justify-between relative mr-2">
-            <div class="overflow-hidden text-left whitespace-nowrap overflow-ellipsis  ">
+        <div class="flex items-center justify-between relative">
+            <div class="overflow-hidden text-left whitespace-nowrap overflow-ellipsis text-sm font-medium flex items-center gap-2.5 text-neutral-600 dark:text-neutral-300 group-hover/link:text-[var(--primary)] transition-colors">
+                <Icon name="material-symbols:folder-outline-rounded" class="text-lg text-neutral-400 group-hover/link:text-[var(--primary)] transition-colors"></Icon>
                 <slot></slot>
             </div>
             { badge !== undefined && badge !== null && badge !== '' &&
-                <div class="transition px-2 h-7 ml-4 min-w-[2rem] rounded-lg text-sm font-bold
-                    text-[var(--btn-content)] dark:text-[var(--deep-text)]
-                    bg-[var(--btn-regular-bg)] dark:bg-[var(--primary)]
+                <div class="transition-all px-2.5 py-0.5 ml-4 min-w-[1.75rem] rounded-full text-xs font-semibold
+                    text-neutral-400 dark:text-neutral-500
+                    bg-black/5 dark:bg-white/10
+                    group-hover/link:bg-[var(--primary)]/15 group-hover/link:text-[var(--primary)]
                     flex items-center justify-center">
                     { badge }
                 </div>

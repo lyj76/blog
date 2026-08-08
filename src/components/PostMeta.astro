@@ -63,16 +63,13 @@ const className = Astro.props.class;
 
     <!-- tags -->
     <div class:list={["items-center", {"flex": !hideTagsForMobile, "hidden md:flex": hideTagsForMobile}]}>
-        <div class="meta-icon"
-        >
+        <div class="meta-icon">
             <Icon name="material-symbols:tag-rounded" class="text-xl"></Icon>
         </div>
-        <div class="flex flex-row flex-nowrap items-center">
-            {(tags && tags.length > 0) && tags.map((tag, i) => (
-                <div class:list={[{"hidden": i == 0}, "mx-1.5 text-[var(--meta-divider)] text-sm"]}>/</div>
+        <div class="flex flex-row flex-wrap items-center gap-1.5">
+            {(tags && tags.length > 0) && tags.map((tag) => (
                 <a href={getTagUrl(tag)} aria-label={`View all posts with the ${tag.trim()} tag`}
-                   class="link-lg transition text-50 text-sm font-medium
-                                hover:text-[var(--primary)] dark:hover:text-[var(--primary)] whitespace-nowrap">
+                   class="tag-capsule">
                     {tag.trim()}
                 </a>
             ))}

@@ -42,35 +42,35 @@ const coverWidth = "28%";
 
 const { remarkPluginFrontmatter } = await entry.render();
 ---
-<div class:list={["card-base flex flex-col-reverse md:flex-col w-full rounded-[var(--radius-large)] overflow-hidden relative", className]} style={style}>
-    <div class:list={["pl-6 md:pl-9 pr-6 md:pr-2 pt-6 md:pt-7 pb-6 relative", {"w-full md:w-[calc(100%_-_52px_-_12px)]": !hasCover, "w-full md:w-[calc(100%_-_var(--coverWidth)_-_12px)]": hasCover}]}>
+<div class:list={["card-base surface-card flex flex-col-reverse md:flex-col w-full rounded-[var(--radius-large)] overflow-hidden relative group", className]} style={style}>
+    <div class:list={["pl-6 md:pl-9 pr-6 md:pr-8 pt-6 md:pt-7 pb-6 relative flex flex-col justify-between", {"w-full md:w-[calc(100%_-_64px)]": !hasCover, "w-full md:w-[calc(100%_-_var(--coverWidth)_-_12px)]": hasCover}]}>
         <a href={url}
-           class="transition group w-full block font-bold mb-3 text-3xl text-90
+           class="transition group/title w-full block font-bold mb-3 text-2xl md:text-3xl text-90
         hover:text-[var(--primary)] dark:hover:text-[var(--primary)]
         active:text-[var(--title-active)] dark:active:text-[var(--title-active)]
-        before:w-1 before:h-5 before:rounded-md before:bg-[var(--primary)]
+        before:w-1.5 before:h-6 before:rounded-full before:bg-gradient-to-b before:from-[var(--primary)] before:to-[oklch(0.65_0.18_calc(var(--hue)+40))]
         before:absolute before:top-[35px] before:left-[18px] before:hidden md:before:block
         ">
             {title}
-            <Icon class="inline text-[2rem] text-[var(--primary)] md:hidden translate-y-0.5 absolute" name="material-symbols:chevron-right-rounded" ></Icon>
-            <Icon class="text-[var(--primary)] text-[2rem] transition hidden md:inline absolute translate-y-0.5 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0" name="material-symbols:chevron-right-rounded"></Icon>
         </a>
 
         <!-- metadata -->
         <PostMetadata published={published} updated={updated} tags={tags} category={category} hideTagsForMobile={true} hideUpdateDate={true} class="mb-4"></PostMetadata>
 
         <!-- description -->
-        <div class:list={["transition text-75 mb-3.5 pr-4", {"line-clamp-2 md:line-clamp-1": !description}]}>
+        <div class:list={["transition text-75 mb-4 pr-4 leading-relaxed", {"line-clamp-2 md:line-clamp-1": !description}]}>
             { description || remarkPluginFrontmatter.excerpt }
         </div>
 
         <!-- word count and read time  -->
-        <div class="text-sm text-black/30 dark:text-white/30 flex gap-4 transition">
-            <div>
+        <div class="text-sm text-black/40 dark:text-white/40 flex items-center gap-4 transition font-medium">
+            <div class="flex items-center gap-1.5">
+                <Icon name="material-symbols:notes-rounded" class="text-base text-[var(--primary)] opacity-70"></Icon>
                 {remarkPluginFrontmatter.words} {" " + i18n(remarkPluginFrontmatter.words === 1 ? I18nKey.wordCount : I18nKey.wordsCount)}
             </div>
-            <div>|</div>
-            <div>
+            <div class="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20"></div>
+            <div class="flex items-center gap-1.5">
+                <Icon name="material-symbols:schedule-outline-rounded" class="text-base text-[var(--primary)] opacity-70"></Icon>
                 {remarkPluginFrontmatter.minutes} {" " + i18n(remarkPluginFrontmatter.minutes === 1 ? I18nKey.minuteCount : I18nKey.minutesCount)}
             </div>
         </div>
@@ -78,28 +78,30 @@ const { remarkPluginFrontmatter } = await entry.render();
     </div>
 
     {hasCover && <a href={url} aria-label={title}
-                    class:list={["group",
+                    class:list={["group/cover",
                         "max-h-[20vh] md:max-h-none mx-4 mt-4 -mb-2 md:mb-0 md:mx-0 md:mt-0",
                         "md:w-[var(--coverWidth)] relative md:absolute md:top-3 md:bottom-3 md:right-3 rounded-xl overflow-hidden active:scale-95"
                     ]} >
-        <div class="absolute pointer-events-none z-10 w-full h-full group-hover:bg-black/30 group-active:bg-black/50 transition"></div>
+        <div class="absolute pointer-events-none z-10 w-full h-full group-hover/cover:bg-black/30 group-active/cover:bg-black/50 transition"></div>
         <div class="absolute pointer-events-none z-20 w-full h-full flex items-center justify-center ">
             <Icon name="material-symbols:chevron-right-rounded"
-                  class="transition opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 text-white text-5xl">
+                  class="transition opacity-0 group-hover/cover:opacity-100 scale-50 group-hover/cover:scale-100 text-white text-5xl">
             </Icon>
         </div>
         <ImageWrapper src={image} basePath={path.join("content/posts/", getDir(entry.id))} alt="Cover Image of the Post"
-                  class="w-full h-full">
+                  class="w-full h-full object-cover">
         </ImageWrapper>
     </a>}
 
     {!hasCover &&
-        <a href={url} aria-label={title} class="!hidden md:!flex btn-regular w-[3.25rem]
-         absolute right-3 top-3 bottom-3 rounded-xl bg-[var(--enter-btn-bg)]
-         hover:bg-[var(--enter-btn-bg-hover)] active:bg-[var(--enter-btn-bg-active)] active:scale-95
+        <a href={url} aria-label={title} class="!hidden md:!flex article-arrow w-10 h-10
+         absolute right-6 top-1/2 -translate-y-1/2 rounded-full
+         bg-[var(--btn-regular-bg)] dark:bg-white/5 dark:border dark:border-white/10
+         hover:bg-[var(--primary)] hover:text-white dark:hover:bg-[var(--primary)] dark:hover:border-transparent
+         text-[var(--primary)] dark:text-neutral-300 shadow-sm items-center justify-center transition-all duration-300
         ">
             <Icon name="material-symbols:chevron-right-rounded"
-                  class="transition text-[var(--primary)] text-4xl mx-auto">
+                  class="text-2xl transition-transform group-hover:translate-x-0.5">
             </Icon>
         </a>
     }

@@ -452,3 +452,135 @@ body:not(.reading-mode) #reading-sidebar-expand {
 		transition: none;
 	}
 }
+
+/* ==========================================================================
+   参考.txt 学术知识库阅读体验增强 (Restrained Academic Reading Styles)
+   ========================================================================== */
+
+/* 1. 锚点条目标题：## <<名称>> 标记为 hl-heading。
+ * 极简克制：无任何背景填充，仅保留左侧精致的主题色竖向强调线条 */
+.hl-heading {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 0.5rem !important;
+    font-weight: 700 !important;
+    color: var(--primary) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    padding: 0 0 0 0.75rem !important;
+    border-radius: 0 !important;
+    border-left: 3.5px solid var(--primary) !important;
+    box-shadow: none !important;
+    margin-top: 6.5rem !important;
+    margin-bottom: 1.25rem !important;
+    transition: all 0.2s ease !important;
+}
+.hl-heading:first-child,
+section > .hl-heading:first-child {
+    margin-top: 0 !important;
+}
+.dark .hl-heading {
+    background: transparent !important;
+    background-color: transparent !important;
+    border-left-color: var(--primary) !important;
+}
+
+/* 2. amsthm 式证明块：:::proof
+ * 极简学术风：无任何填充背景色，与正文纸面融为一体，仅标头文字主题色 + ■ 结尾 */
+.proof-block {
+    margin: 1.5em 0 !important;
+    padding: 0.75rem 1rem !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid color-mix(in oklab, var(--btn-regular-bg) 70%, transparent) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    overflow: hidden !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+.dark .proof-block {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+.proof-title {
+    padding: 0 !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    color: var(--primary) !important;
+    background: transparent !important;
+    border-bottom: none !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.4rem !important;
+    margin-bottom: 0.5rem !important;
+}
+.dark .proof-title {
+    background: transparent !important;
+    border-bottom: none !important;
+}
+.proof-block > p,
+.proof-block > div:not(.proof-title) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+.proof-block > p:first-of-type {
+    margin-top: 0 !important;
+}
+.proof-block .proof-qed {
+    float: right !important;
+    font-weight: 700 !important;
+    color: var(--primary) !important;
+    margin-left: 0.5em !important;
+    font-size: 1.1em !important;
+}
+
+/* 3. wiki 链接：平时与正文文字颜色完全一致，鼠标 Hover 时才点亮青色 */
+a[data-wiki-link],
+.prose a[data-wiki-link],
+.markdown-content a[data-wiki-link],
+.custom-md a[data-wiki-link]:not(.no-styling) {
+    color: inherit !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    border-bottom: 1px dashed oklch(0.65 0.16 calc(var(--hue) + 140) / 0.4) !important;
+    transition: all 0.2s ease !important;
+}
+a[data-wiki-link]:hover,
+.prose a[data-wiki-link]:hover,
+.markdown-content a[data-wiki-link]:hover,
+.custom-md a[data-wiki-link]:not(.no-styling):hover {
+    color: oklch(0.68 0.16 calc(var(--hue) + 140)) !important;
+    border-bottom-style: solid !important;
+    border-bottom-color: oklch(0.68 0.16 calc(var(--hue) + 140)) !important;
+    background-color: oklch(0.65 0.16 calc(var(--hue) + 140) / 0.08) !important;
+    border-radius: 0.2rem !important;
+}
+
+/* 4. 标签微型胶囊（全站 Tag 圈包围样式） */
+.tag-capsule {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0.2rem 0.65rem !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    border-radius: 9999px !important;
+    color: var(--primary) !important;
+    background-color: color-mix(in oklab, var(--primary) 10%, transparent) !important;
+    border: 1px solid color-mix(in oklab, var(--primary) 22%, transparent) !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+    text-decoration: none !important;
+}
+.tag-capsule:hover {
+    background-color: color-mix(in oklab, var(--primary) 20%, transparent) !important;
+    border-color: var(--primary) !important;
+    transform: translateY(-1px) !important;
+}
+.dark .tag-capsule {
+    background-color: color-mix(in oklab, var(--primary) 16%, transparent) !important;
+    border-color: color-mix(in oklab, var(--primary) 32%, transparent) !important;
+}

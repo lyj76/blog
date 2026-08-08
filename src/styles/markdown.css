@@ -1,6 +1,60 @@
 .custom-md {
+    section {
+        margin-top: 6.5rem !important;
+        margin-bottom: 0 !important;
+
+        &:first-of-type,
+        &:first-child {
+            margin-top: 0 !important;
+        }
+
+        > h2:first-child,
+        > .hl-heading:first-child {
+            margin-top: 0 !important;
+        }
+    }
+
     h1 {
-        @apply text-3xl;
+        margin-top: 4rem !important;
+        margin-bottom: 1.5rem !important;
+        font-size: 2rem !important;
+        font-weight: 800 !important;
+        line-height: 1.3 !important;
+
+        &:first-child {
+            margin-top: 0.5rem !important;
+        }
+    }
+
+    h2 {
+        margin-top: 4rem !important;
+        margin-bottom: 1.25rem !important;
+        font-size: 1.625rem !important;
+        line-height: 1.35 !important;
+        font-weight: 700 !important;
+
+        &:first-child {
+            margin-top: 0 !important;
+        }
+    }
+
+    h3 {
+        margin-top: 2.75rem !important;
+        margin-bottom: 1rem !important;
+        font-size: 1.3rem !important;
+        line-height: 1.4 !important;
+        font-weight: 700 !important;
+
+        &:first-child {
+            margin-top: 0.5rem !important;
+        }
+    }
+
+    h4 {
+        margin-top: 2rem !important;
+        margin-bottom: 0.75rem !important;
+        font-size: 1.125rem !important;
+        font-weight: 600 !important;
     }
 
     h1, h2, h3, h4, h5, h6 {
@@ -19,23 +73,34 @@
         }
     }
 
+    p {
+        margin-bottom: 1.4rem;
+        line-height: 1.85;
+        font-size: 1.025rem;
+        letter-spacing: 0.01em;
+    }
+
     a:not(.no-styling) {
-        @apply relative bg-none font-medium text-[var(--primary)]
-        underline decoration-[var(--link-underline)] decoration-1 decoration-dashed underline-offset-4;
+        @apply relative bg-none font-medium transition-all;
+        color: inherit !important;
+        text-decoration: none;
+        border-bottom: 1px dashed color-mix(in oklab, var(--primary) 40%, transparent);
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
         display: inline-block;
     
         &:hover, &:active {
-            @apply decoration-transparent;
-            background: var(--btn-plain-bg-hover);
-            border-bottom: 1px dashed var(--link-hover);
+            color: var(--primary) !important;
+            border-bottom-style: solid;
+            border-bottom-color: var(--primary);
+            background: color-mix(in oklab, var(--primary) 8%, transparent);
+            border-radius: 0.2rem;
             text-decoration: none;
         }
     }
 
     code {
-        @apply bg-[var(--inline-code-bg)] text-[var(--inline-code-color)] px-1 py-0.5 rounded-md overflow-hidden;
+        @apply bg-[var(--inline-code-bg)] text-[var(--inline-code-color)] px-1.5 py-0.5 rounded-md overflow-hidden;
 
         font-family: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
         &:before {
@@ -88,38 +153,60 @@
     }
 
     .expressive-code {
-        @apply my-4;
+        @apply my-6;
         ::selection {
             @apply bg-[var(--codeblock-selection)];
         }
     }
 
-
     ul, ol {
-        li::marker {
-            @apply text-[var(--primary)];
+        margin-top: 0.85rem;
+        margin-bottom: 1.4rem;
+        padding-left: 1.5rem;
+        li {
+            margin-bottom: 0.45rem;
+            line-height: 1.8;
+            &::marker {
+                @apply text-[var(--primary)];
+            }
         }
     }
 
+    /* 注脚/引用：无左侧竖线，无背景色，纯净 ▶ 图标引领 */
     blockquote {
-        @apply not-italic border-transparent relative;
+        @apply not-italic my-5 py-1 px-0 text-neutral-500 dark:text-neutral-400 text-sm transition-all;
+        background: transparent !important;
+        border-left: none !important;
         font-weight: inherit;
 
-        &:before {
-            @apply content-[''] absolute -left-1 block transition bg-[var(--btn-regular-bg)] h-full w-1 rounded-full;
+        p {
+            @apply m-0 inline;
         }
 
-        /* Remove the double quotes from default styles */
-        p:before, p:after {
+        p:before {
+            content: "▶ ";
+            color: var(--primary);
+            font-size: 0.75em;
+            vertical-align: 0.05em;
+            margin-right: 0.35rem;
+            opacity: 0.85;
+        }
+
+        p:after {
             @apply content-none;
         }
-
     }
 
-    .katex-display-container {
+    .katex-display-container,
+    .katex-display {
         max-width: 100%;
         overflow-x: auto;
-        margin: 1em 0;
+        margin: 1.75em 0;
+        padding: 0.5rem 0;
+        text-align: center;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
     }
     
 }
