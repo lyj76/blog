@@ -37,3 +37,7 @@ node_modules
 # QA tooling artifacts
 .playwright-mcp/
 article-02-snapshot.md
+
+# stray slow-disk node_modules backup (never commit)
+node_modules.bak-9p/
+node_modules.bak-*/
