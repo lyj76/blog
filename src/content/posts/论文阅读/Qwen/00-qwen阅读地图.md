@@ -15,10 +15,11 @@ category: 论文阅读
 ## 篇目索引
 
 - [[论文阅读/qwen/01-qwen主线]]：为什么是 Decoder-Only——因果掩码的训练并行与推理复用、单层精确公式、每层 7 个权重矩阵的参数拓扑。
-- [[论文阅读/qwen/02-qwen-decoder-block]]：单层四个算子深度解构——Pre-RMSNorm、GQA、RoPE、SwiGLU——含完整张量维度追踪。
-- [[论文阅读/qwen/03-qwen输入与训练]]：152K 词表的信息密度、右移一位对齐、交叉熵解析梯度与 SFT -100 掩码契约。
-- [[论文阅读/qwen/04-qwen推理与采样]]：Prefill 计算受限与 Decode 带宽受限的分水岭、KV Cache 精确显存模型、Top-p 采样。
-- [[论文阅读/qwen/05-qwen模型文件与代码]]：config.json 字段决定的算子结构、safetensors 权重形状契约与 PyTorch 源码映射。
+- [[论文阅读/qwen/02-架构解剖]]：整机系统图——五模块逐个讲透、一条 prompt 的数据流、参数量分布与全系列装配图。
+- [[论文阅读/qwen/03-qwen-decoder-block]]：单层四个算子深度解构——Pre-RMSNorm、GQA、RoPE、SwiGLU——含完整张量维度追踪。
+- [[论文阅读/qwen/04-qwen输入与训练]]：152K 词表的信息密度、右移一位对齐、交叉熵解析梯度与 SFT -100 掩码契约。
+- [[论文阅读/qwen/05-qwen推理与采样]]：Prefill 计算受限与 Decode 带宽受限的分水岭、KV Cache 精确显存模型、Top-p 采样。
+- [[论文阅读/qwen/06-qwen模型文件与代码]]：config.json 字段决定的算子结构、safetensors 权重形状契约与 PyTorch 源码映射。
 
 ---
 
