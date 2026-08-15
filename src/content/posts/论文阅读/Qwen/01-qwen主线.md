@@ -1,123 +1,156 @@
 ---
-title: Qwen 主线：从文本到下一个词的完整链路
+title: Qwen 主线：为什么是 Decoder-Only
 published: 2026-08-08
-description: 一条流水线讲完 Qwen：文本 → token ID → embedding → 24 层 Decoder → LM Head → Softmax → 下一个词。
-tags: [论文阅读, Qwen, 主线]
+description: 从经典 Transformer 双塔结构出发：因果掩码如何同时给出训练并行与推理复用，单层精确公式与每层 7 个权重矩阵的参数拓扑。
+tags: [论文阅读, Qwen, 架构, Decoder-Only, 因果掩码]
 category: 论文阅读
 ---
 
-# Qwen 主线：从文本到下一个词的完整链路
+# Qwen 主线：为什么是 Decoder-Only
 
-> Qwen 是 Decoder-only 语言模型。本文只抓一条主线：文本如何变成 token，token 如何经过 24 层 block，最后如何变成词表上的概率分布。一个 block 的完整数学见 [[论文阅读/qwen/02-qwen-decoder-block]]，架构背景见 [[论文阅读/transformer/01-transformer主线]]。
+> 论文：Yang et al., *Qwen2 Technical Report*（[arXiv:2407.10671](https://arxiv.org/abs/2407.10671)）。参数基准与阅读依赖见 [[论文阅读/qwen/00-qwen阅读地图]]。
 
-## 一条流水线：文本变成下一个词
+## 为什么是 Decoder-Only
 
-设输入文本为 $s$，tokenizer 输出长度为 $T$ 的整数序列：
+原始 Transformer（Vaswani et al., 2017）是 Encoder-Decoder 双塔：Encoder 把输入编码成双向表示，Decoder 靠 Cross-Attention 把这份表示注入生成。这套结构是为翻译设计的——源语言和目标语言是两套不同的序列。
 
-$$
-\operatorname{Tokenizer}(s)=t=(t_1,\ldots,t_T),\qquad t_i\in\{0,\ldots,V-1\}.
-$$
+Qwen 把它砍到只剩 Decoder：
 
-以用户当前的 Qwen2-0.5B 配置为例：$d_{model}=896$、$L=24$、$h_q=14$、$h_{kv}=2$、$d_h=64$、$d_{ff}=4864$、$V=151936$。
+```text title="arch-compare.txt"
+经典 Transformer (Encoder-Decoder)          现代 Qwen2.5 (Decoder-Only)
+┌────────────────────────┐                ┌────────────────────────┐
+│     Encoder Block      │                │  Embedding (词表映射)   │
+└───────────┬────────────┘                └───────────┬────────────┘
+            ▼                                         ▼
+┌────────────────────────┐                ┌────────────────────────┐
+│     Decoder Block      │                │  24 × Decoder Layer    │
+│  - Self-Attention      │                │   - Self-Attention     │
+│  - Cross-Attention     │                │     (q, k, v, o_proj)  │
+│  - FFN                 │                │   - MLP / SwiGLU       │
+└────────────────────────┘                │     (gate, up, down)   │
+                                          └───────────┬────────────┘
+                                                      ▼
+                                          ┌────────────────────────┐
+                                          │   lm_head (预测下一个词) │
+                                          └────────────────────────┘
+```
 
-整个前向可以压成：
+Encoder 和 Cross-Attention 是为"两套序列"准备的：Encoder 编码源语言，Cross-Attention 把它搬进 Decoder 的生成过程。现代 LLM 的任务是续写——输入和输出是同一根序列的前后半段，不存在第二套序列，这两件组件没有可注入的对象。
 
-$$
-t
-\xrightarrow{\text{Embedding}}
-H^0\in\mathbb{R}^{T\times896}
-\xrightarrow{\text{24 Decoder blocks}}
-H^{24}\in\mathbb{R}^{T\times896}
-\xrightarrow{\text{final RMSNorm}}
-\xrightarrow{\text{LM Head}}
-Z\in\mathbb{R}^{T\times151936}
-\xrightarrow{\text{取最后一行 + softmax}}
-p_T\in\mathbb{R}^{151936}.
-$$
+| 砍掉的组件 | 为翻译准备的职责 | 续写任务里 |
+|:---|:---|:---|
+| Encoder | 双向编码源语言 | 不需要——前缀已在前向中 |
+| Cross-Attention | 把源语言状态注入 Decoder | 不需要——没有第二套序列 |
 
-$p_T$ 是当前位置预测下一个 token 的概率分布。生成一个 token 后，把它追加到输入序列，重新进行下一轮预测；推理时用 KV Cache 保存历史层的 $K,V$，避免每轮重复计算历史 token。
+但"任务变了"只是动机。Decoder-Only 能统一训练与推理，靠的是一条数学性质：**因果掩码**。
 
-## <<Token：文本到数字的第一跳>>
+## 因果掩码：一条性质，两个收益
 
-模型的输入不是字符串，而是 token ID：
-
-$$
-s\longrightarrow(t_1,\ldots,t_T).
-$$
-
-$t_i$ 只是词表索引，不代表一个完整的"词"。它可能是一个汉字、一个英文子词、一个标点或一个控制 token。Qwen 的词表大小在该配置中为 $151936$，分词和训练输入见 [[论文阅读/qwen/03-qwen输入与训练]]。
-
-## <<Embedding：查表不是计算>>
-
-令 embedding 矩阵为 $E\in\mathbb{R}^{V\times896}$。第 $i$ 个 token 直接取矩阵第 $t_i$ 行：
+注意力计算里加一个下三角掩码：
 
 $$
-H^0_i=E[t_i]\in\mathbb{R}^{896},
+M_{ij} = \begin{cases} 0, & j \le i, \\ -\infty, & j > i. \end{cases}
 $$
 
-整句写成
+加到缩放点积上：
 
 $$
-H^0=E[t]\in\mathbb{R}^{T\times896}.
+\text{Attn}(Q,K,V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d_k}} + M\right) V.
 $$
 
-这一步是索引，不是把 token ID 乘某个数字。Qwen 不在这里加经典 Transformer 的绝对正弦位置向量；位置通过每层 attention 内部的 RoPE 作用到 $Q,K$ 上。
+$-\infty$ 经过 Softmax 归零，位置 $i$ 只能看见 $1, \dots, i$。这条性质同时给出训练和推理两个收益。
 
-## <<24 层 Decoder：骨架在循环什么>>
+**训练并行。** 没有掩码时，位置 $i$ 的预测依赖未来 token，只能逐位串行。掩码切断了"未来 → 过去"的信息流，一次前向就能算出整条序列所有位置的概率，一次反向得到全部梯度。
 
-Qwen 每层是 Pre-RMSNorm 的 Decoder block。设第 $l-1$ 层输出为 $H^{l-1}$：
+**推理复用。** 位置 $i$ 的 $K, V$ 只依赖前 $i$ 个 token。生成第 $T+1$ 个词时，前 $T$ 个词的 $K, V$ 一个都没变——缓存下来，下次直接用。这就是 KV Cache 的存在依据。
 
-$$
-U^l=H^{l-1}+\operatorname{Attention}\!\left(\operatorname{RMSNorm}(H^{l-1})\right),
-$$
+两个收益是同一条性质的左右手。KV Cache 的显存账目见 [[论文阅读/qwen/04-qwen推理与采样]]。
 
-$$
-H^l=U^l+\operatorname{SwiGLU}\!\left(\operatorname{RMSNorm}(U^l)\right),
-\qquad l=1,\ldots,24.
-$$
+## 下一个 Token 是怎么算出来的
 
-每个张量的外部形状保持 $T\times896$。attention 内部把 $896$ 投影为 14 个 $64$ 维 Q 头、2 个 $64$ 维 K/V 头；SwiGLU 内部把 $896$ 升到 $4864$，逐元素门控后再降回 $896$。完整 block 见 [[论文阅读/qwen/02-qwen-decoder-block]]，文件与代码映射见 [[论文阅读/qwen/05-qwen模型文件与代码]]。
+Decoder-Only 的输入输出是一条链：embedding 查表 → 24 层 Block 逐层变换 → 词表投影 → 采样。最后一步的形状是硬约束——$h^{(24)} \in \mathbb{R}^{896}$ 必须乘一个 $151936 \times 896$ 的分类器，才能对上 151936 个词。
 
-Qwen 是 causal decoder。当前位置的 attention 只能看自己和左侧 token，不能读取右侧答案；这由 causal mask 把未来位置的分数设为 $-\infty$ 实现。
-
-## <<LM Head：896 维回到词表>>
-
-最终 hidden state 经过最后 RMSNorm，得到 $H\in\mathbb{R}^{T\times896}$。LM Head 是一个把 hidden size 映射到词表的线性层：
+单看一层，一个 token 的变换是：
 
 $$
-Z=H W_U,\qquad W_U\in\mathbb{R}^{896\times151936},\qquad
-Z\in\mathbb{R}^{T\times151936}.
+h^{(l+1)} = h^{(l)} + f_{\text{mlp}}\Big(\text{RMSNorm}\big(h^{(l)} + f_{\text{attn}}(\text{RMSNorm}(h^{(l)}))\big)\Big).
 $$
 
-$Z_{i,j}$ 是第 $i$ 个位置对词表第 $j$ 个 token 的 logit。它还不是概率，也不要求落在 $[0,1]$；每一行要单独经过 softmax。
+$f_{\text{attn}}$ 内部是 QKV 投影 → RoPE → 缩放点积 → $W_O$；$f_{\text{mlp}}$ 内部是 SwiGLU 三矩阵（gate/up/down）。残差和 RMSNorm 不是装饰——Pre-Norm 决定了深层梯度能直通。逐算子拆解见 [[论文阅读/qwen/02-qwen-decoder-block]]。
 
-当 `tie_word_embeddings=true` 时，$W_U$ 与 embedding 矩阵共享参数：如果 $E\in\mathbb{R}^{V\times896}$，则通常有 $W_U=E^T$。输入查表和输出分类使用同一组词向量参数。
+**这里只写了一层。真实模型把这条链重复 24 次**，上一层输出是下一层输入。把 24 层压成单个 $W_{\text{MLP}}$ 的写法是教学简化，会丢掉层间交互——本文不采用。
 
-## <<Softmax：logits 变成概率>>
-
-生成时只取最后一个位置的 logits $z_T\in\mathbb{R}^{151936}$：
+最后一层之后接词表投影与 Softmax：
 
 $$
-p_T=\operatorname{softmax}(z_T),\qquad
-p_{T,j}=\frac{e^{z_{T,j}}}{\sum_{k=1}^{V}e^{z_{T,k}}}.
+p = \operatorname{softmax}\big(h^{(24)} W_{\text{LM\_Head}}^T\big) \in \mathbb{R}^{151936}.
 $$
 
-$p_T$ 的每个分量非负且总和为 1。接下来有两类选择：
+$p$ 的 151936 个分量对应词表，采样后产生下一个 token。完整链路收束为：查表 → 24 层 → 投影 → 采样。
+
+## 每层 7 个权重矩阵：参数拓扑
+
+以 Qwen2-0.5B 为例：$d_{\text{model}}=896$、$h_q=14$、$h_{kv}=2$、$d_{ff}=4864$、$V=151936$。单层内部是 7 个投影矩阵：
+
+```text title="layer-topology.txt"
+   [ 输入向量 X (维度: 896) ]
+                                   │
+   ┌───────────────────────────────┴───────────────────────────────┐
+   │ 1. Self-Attention 区域 (4 个矩阵)                             │
+   │                                                               │
+   │   X ───┬───> [ q_proj ] (896 ➔ 896)  ───> 生成 Q              │
+   │        ├───> [ k_proj ] (896 ➔ 128)  ───> 生成 K              │
+   │        └───> [ v_proj ] (896 ➔ 128)  ───> 生成 V              │
+   │                                                               │
+   │   经过 Attention(Q, K, V) 拼接后 ──> [ o_proj ] (896 ➔ 896)   │
+   └───────────────────────────────┬───────────────────────────────┘
+                                   │  (残差连接 + RMSNorm)
+   ┌───────────────────────────────┴───────────────────────────────┐
+   │ 2. MLP / FFN 区域 (3 个矩阵)                                  │
+   │                                                               │
+   │   X ───┬───> [ gate_proj ] (896 ➔ 4864) ──┐ (SiLU 激活)        │
+   │        │                                ├───> Hadamard 逐元素相乘
+   │        └───> [  up_proj  ] (896 ➔ 4864) ──┘                   │
+   │                                                               │
+   │   相乘后的 4864 维特征 ──> [ down_proj ] (4864 ➔ 896)         │
+   └───────────────────────────────┬───────────────────────────────┘
+                                   │
+                       [ 输出向量 (维度: 896) ]
+```
+
+七个矩阵的参数量：
+
+| 矩阵 | 形状 | 参数量 | 作用 |
+|:---|:---|:---|:---|
+| q_proj | 896×896 | 802,816 | 生成 Query |
+| k_proj | 128×896 | 114,688 | 生成 Key |
+| v_proj | 128×896 | 114,688 | 生成 Value |
+| o_proj | 896×896 | 802,816 | 多头拼接后投影 |
+| gate_proj | 4864×896 | 4,358,144 | SwiGLU 门控开关 |
+| up_proj | 4864×896 | 4,358,144 | SwiGLU 内容投影 |
+| down_proj | 896×4864 | 4,358,144 | 降维回残差流 |
+| **单层合计** | | **14,909,440** | |
+| **24 层合计** | | **357,826,560** | 约 3.58 亿 |
+
+k_proj 和 v_proj 只有 128×896，而不是 896×896——这是 GQA 的直接后果：
 
 $$
-t_{T+1}=\arg\max_j p_{T,j}
+d_{kv} = h_{kv} \times d_h = 2 \times 64 = 128.
 $$
 
-是贪心解码；按 $p_T$ 随机抽样，再配合 temperature、top-k、top-p，是采样解码。具体见 [[论文阅读/qwen/04-qwen推理与采样]]。
+14 个查询头共享 2 份 KV，KV Cache 缩到 MHA 的 $2/14 = 1/7$，即削减 85.7%。广播机制与显存建模见 [[论文阅读/qwen/04-qwen推理与采样]]。
 
-训练时，模型对每个位置都产生一行 logits，目标 token 整体右移一位对齐；损失通常是所有有效位置的 causal language-model cross-entropy，见 [[论文阅读/qwen/03-qwen输入与训练]]。
+## 24 层堆叠：重复但不冗余
 
-## 各环节地图
+24 层结构同构——同样的 7 个矩阵、同样的残差结构——但参数完全独立，各有一份。结构同构不等于参数同质。
 
-| 链路环节 | 数学对象 | 深入阅读 |
-| --- | --- | --- |
-| 文本 → token ID | $s\to(t_1,\ldots,t_T)$ | [[论文阅读/qwen/03-qwen输入与训练]]、[[tokenizer-类型契约]] |
-| ID → embedding | $H^0=E[t]$ | [[论文阅读/qwen/03-qwen输入与训练]] |
-| Decoder block | RMSNorm + GQA + SwiGLU + residual | [[论文阅读/qwen/02-qwen-decoder-block]] |
-| hidden → logits | $Z=HW_U$ | [[论文阅读/qwen/02-qwen-decoder-block]] |
-| logits → token | softmax + decode | [[论文阅读/qwen/04-qwen推理与采样]]、[[generate-生成机制]] |
+"浅层管语法、深层管推理"这类层间分工是解释性研究的经验观察（如 induction heads 一类工作），不是 Qwen 报告里的定理。可作直觉，不宜当结论引用。
+
+## 边界
+
+- 本文的单层公式是精确的；"24 层压成单个 $W_{\text{MLP}}$"是教学简化，本文不采用。
+- "浅层语法、深层推理"是解释性研究的经验观察，不是 Qwen2 Technical Report 的结论。
+- GQA 的 85.7% 只算 KV Cache 一项，不含权重与激活。
+- Decoder-Only 在大量基准上表现更好是经验事实，但架构选型的直接理由是因果掩码给出的训练并行与推理复用，两者不要混为一谈。
+
+单层算子逐个拆解见 [[论文阅读/qwen/02-qwen-decoder-block]]；训练目标见 [[论文阅读/qwen/03-qwen输入与训练]]；推理与 KV Cache 见 [[论文阅读/qwen/04-qwen推理与采样]]。

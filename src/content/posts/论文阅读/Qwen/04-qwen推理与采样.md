@@ -1,135 +1,100 @@
 ---
-title: Qwen 推理：从 GQA 与 KV Cache 到采样
+title: Qwen 推理：Prefill/Decode、KV Cache 与采样
 published: 2026-08-08
-description: 把 Qwen 的自回归推理串起来：单 token 解码、GQA、KV Cache、LM Head、temperature、top-k 与 top-p。
-tags: [论文阅读, Qwen, GQA, KV Cache, 生成]
+description: 自回归推理的物理瓶颈：Prefill 为什么算力受限、Decode 为什么带宽受限、KV Cache 的精确显存模型、采样为什么用 Top-p。
+tags: [论文阅读, Qwen, 推理, KV Cache, GQA, 采样]
 category: 论文阅读
 ---
 
-# Qwen 推理：从 GQA 与 KV Cache 到采样
+# Qwen 推理：Prefill/Decode、KV Cache 与采样
 
-> 训练时可以并行整段序列，生成时却是一 token 一 token 地向右延伸。推理篇只回答一个问题：每一轮到底重算什么、缓存什么、最后如何选 token。
+> 承接 [[论文阅读/qwen/01-qwen主线]] 与 [[论文阅读/qwen/03-qwen输入与训练]]：01 给出因果掩码 → KV Cache 的理论基础，03 拆解了训练目标。本篇从推理侧切入——**生成一个词为什么这么慢、显存花在哪、采样在干什么**。索引见 [[论文阅读/qwen/00-qwen阅读地图]]。
 
-## <<生成循环：每轮只新增一个位置>>
+## Prefill 与 Decode：为什么生成是两步
 
-已有序列为 $t_{1:T}$，模型只需要得到最后位置的 logits：
+自回归推理被物理地分成两个阶段，瓶颈完全不同：
 
-$$
-t_{1:T}\xrightarrow{\text{Decoder}}z_T\in\mathbb{R}^{151936}
-\xrightarrow{\text{decode rule}}t_{T+1}.
-$$
+```text title="two_phases.txt"
+【阶段 1：Prefill】
+输入完整 Prompt ──> 矩阵×矩阵 (GEMM) ──> 算力密集 ──> 【计算受限】
+                                      │
+                                      ▼ 产出第 1 个 Token 与全部历史 KV Cache
+【阶段 2：Decode】
+单步输入 1 个 Token ──> 矩阵×向量 (GEMV) ──> 算力空转 ──> 【带宽受限】
+```
 
-把新 token 追加后进入下一轮：
+**Prefill（计算受限）**：一次性把整条 Prompt 并行送进模型，算的是 GEMM，GPU 的 Tensor Core 满载——瓶颈是算力（TFLOPS）。
 
-$$
-t_{1:T}\to t_{1:T+1}\to t_{1:T+2}\to\cdots.
-$$
+**Decode（带宽受限）**：每步只输入上一个生成的 Token，算的是 GEMV。但为了算这一个 Token，GPU **必须把全部权重从显存读一遍**——0.5B 的模型约 1GB，70B 约 140GB。算力密度极低，GPU 大部分时间在等数据搬运——瓶颈是显存带宽（GB/s）。
 
-如果每轮都从头计算所有历史 token，成本会随生成长度迅速增加。KV Cache 保存每层历史位置的 K/V，使下一轮只为新 token 计算 Q/K/V。
+这两个阶段的剪刀差决定了生成为什么慢：Prompt 越长，Prefill 越久；生成 Token 越多，Decode 步数越多，每步都被带宽卡死。
 
-## <<KV Cache：保存历史 K/V>>
+## KV Cache：为什么值得用显存换时间
 
-当前 query $q_t$ 需要访问历史：
+Decode 每步都要算新 Token 的注意力，而注意力需要和**所有历史 Token** 的 K、V 做点积。如果没有缓存，第 $T$ 步要把前 $T-1$ 个 Token 的 K、V 全部重算一遍——成本随序列长度二次方增长。
 
-$$
-A_t=\operatorname{softmax}\left(
-\frac{q_tK_{\le t}^T}{\sqrt{d_h}}+M_t
-\right),
-\qquad
-o_t=A_tV_{\le t}.
-$$
+因果掩码保证了关键性质：**位置 $i$ 的 K、V 只依赖前 $i$ 个 Token**。生成第 $T+1$ 个词时，前 $T$ 个词的 K、V 一个都没变。缓存下来，每步只需算新 Token 的 $k_t, v_t$，和缓存拼接后使用。
 
-$K_{\le t},V_{\le t}$ 来自 cache。对每层、单 batch，若 K/V head 数是 $h_{kv}$、head dim 是 $d_h$、元素字节数为 $b$，缓存规模近似为
+代价是显存。KV Cache 的精确公式：
 
 $$
-M_{KV}=2\,T\,h_{kv}\,d_h\,b.
+M_{\text{KV}} = 2 \times B \times L \times h_{kv} \times d_h \times T \times b_{\text{bytes}}.
 $$
 
-前面的 2 是 K 和 V 两份。层数、batch、上下文长度都会再乘上去。
+- 系数 $2$：K 和 V 两份张量；
+- $b_{\text{bytes}}$：精度字节数，BF16/FP16 为 2。
 
-## <<GQA：14 个 Q 头共享 2 个 KV 头>>
-
-Qwen 的配置是
-
-$$
-h_q=14,\qquad h_{kv}=2,\qquad d_h=64.
-$$
-
-投影后的形状：
+逐项代入 Qwen2-0.5B（$L=24, h_{kv}=2, d_h=64$），$B=4$、$T=32{,}768$：
 
 $$
-Q\in\mathbb{R}^{14\times T\times64},
-\qquad K,V\in\mathbb{R}^{2\times T\times64}.
+M_{\text{KV}} = 2 \times 4 \times 24 \times 2 \times 64 \times 32768 \times 2 \approx 0.804\text{ GB}.
 $$
 
-每 7 个 Q 头共享一组 K/V：
+如果把 $h_{kv}$ 换成 MHA 的 14：$2 \times 4 \times 24 \times 14 \times 64 \times 32768 \times 2 \approx 5.63\text{ GB}$——**GQA 让 KV Cache 缩到 1/7**。这就是 02 里"KV 头数出现在乘数位置"的后果：长文本并发时，这一项往往决定单卡能承载多少请求。
+
+## 采样：Logits 怎么变成 Token
+
+最后一层输出 $z \in \mathbb{R}^{151936}$ 是 Logits，不是 Token。把它变成离散 Token 有三道闸门。
+
+**温度 $\tau$**：Softmax 前除一个系数，控制分布的锐利程度：
 
 $$
-(Q_1,\ldots,Q_7)\leftrightarrow(K_1,V_1),
-\qquad
-(Q_8,\ldots,Q_{14})\leftrightarrow(K_2,V_2).
+p_j^{(\tau)} = \frac{e^{z_j / \tau}}{\sum_k e^{z_k / \tau}}.
 $$
 
-实现 attention 前通常把 K/V 按组 repeat 到 14 个头参与计算，但 cache 中只保存原始 2 头：
+- $\tau \to 0$：分布趋向狄拉克脉冲，等价于贪心解码（取 $\arg\max$）；
+- $\tau = 1$：原始分布；
+- $\tau > 1$：分布被拉平，长尾词更容易被采到。
+
+**Top-p 核采样**：动态截断候选集。按概率降序，取累积概率刚过阈值 $p$ 的最小集合：
 
 $$
-(2,T,64)\xrightarrow{\operatorname{repeat\_kv}}(14,T,64).
+k^* = \min \left\{ k : \sum_{i=1}^k p_{(i)} \ge p \right\}.
 $$
 
-因此 GQA 把 KV Cache 的头数从 14 降到 2，理想缓存比例是 $2/14=1/7$；这描述存储量，不等于端到端延迟一定降低 7 倍。
+Top-p 的自适应性是关键：分布尖锐时候选集自动缩小，平坦时自动扩大。对比 Top-k 固定截断 $k$ 个——分布尖锐时 Top-k 会混入不必要的长尾，平坦时又会漏掉应该考虑的候选。Top-p 用概率总量替代固定数量，规避了这两个问题。
 
-## <<LM Head：hidden state 变成 logits>>
-
-最后一个 hidden vector 经最终 RMSNorm 后，通过词表投影：
+**重复惩罚**：对已出现的 Token 衰减其 Logit：
 
 $$
-h_T\in\mathbb{R}^{896}
-\xrightarrow{W_U\in\mathbb{R}^{896\times151936}}
-z_T\in\mathbb{R}^{151936}.
+z_i' = \begin{cases} z_i / \alpha_{\text{penalty}}, & z_i > 0, \\ z_i \cdot \alpha_{\text{penalty}}, & z_i \le 0, \end{cases} \quad (\alpha_{\text{penalty}} \ge 1).
 $$
 
-$z_T$ 是未归一化分数。它的排序和差距交给解码策略处理，模型前向本身只负责产生 logits。
+正 Logit 被压、负 Logit 被推，已生成过的词更难再被采到。
 
-## <<Temperature：改变分布锐度>>
+## 单步自回归：完整执行流
 
-温度作用在 logits 上：
-
-$$
-p_j^{(\tau)}=\operatorname{softmax}\left(\frac{z}{\tau}\right)_j.
-$$
-
-$\tau>1$ 使分布变平，$0<\tau<1$ 使分布变尖；$\tau\to0^+$ 逼近 argmax。温度不会改变 token 排名。
-
-## <<Top-k 与 Top-p：限制采样候选>>
-
-Top-k 只保留概率最高的 $k$ 个 token：
+把四块拼起来，一步生成的全过程：
 
 $$
-S_k=\operatorname{TopK}(z,k),
-\qquad
-z'_j=\begin{cases}z_j,&j\in S_k,\\-\infty,&j\notin S_k.\end{cases}
+t_n \xrightarrow{\text{Embedding}} h_n^0 \xrightarrow{\text{24 层 + KV Cache}} h_n^{24} \xrightarrow{\text{LM Head}} z_n \in \mathbb{R}^{151936} \xrightarrow{\tau / \text{Top-p}} \text{Sample}(p_n) \to t_{n+1}.
 $$
 
-Top-p 取按概率排序后累计概率达到阈值 $p$ 的最小集合：
+## 边界
 
-$$
-k^*=\min\left\{k:\sum_{i=1}^{k}p_{(i)}\ge p\right\}.
-$$
+- **Prefill/Decode 的分野在"一个 Token"处**：Prefill 阶段第一个 Token 也是算力受限的 GEMM，从第二个 Token 起才转入带宽受限的 GEMV。
+- **KV Cache 公式不含权重和激活**：它只是缓存那一项的显存。真实部署显存是权重 + 激活 + KV Cache 三项之和，KV Cache 只是其中可被 GQA 压缩的一项。
+- **采样参数是工程调优，不是理论结论**：温度、Top-p、重复惩罚的取值依赖任务（代码生成偏好低温度、对话偏好中等），没有普适最优。
+- **"GQA 是推理最大优化"的表述要限定在 KV Cache 范围内**：对训练显存，GQA 帮助有限（02 篇已标注）。
 
-Top-k 的候选数固定，top-p 的候选数随分布形状变化。过滤后重新归一化，再按概率抽样。
-
-## 推理的一轮完整路径
-
-$$
-\text{新 token}
-\to\text{当前 hidden}
-\to\text{Q/K/V}
-\to\text{读取 KV Cache}
-\to\text{GQA attention}
-\to\text{SwiGLU}
-\to\text{LM Head logits}
-\to\text{temperature/top-k/top-p}
-\to\text{下一个 token}.
-$$
-
-生成配置属于解码层，不改变模型参数；KV Cache 属于计算复用层，不改变模型的数学目标。两者都服务于同一个自回归循环。
+config 字段到 PyTorch 源码的映射见 [[论文阅读/qwen/05-qwen模型文件与代码]]。
