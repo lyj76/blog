@@ -127,7 +127,26 @@ export default defineConfig({
 			remarkWikiLink,
 		],
 		rehypePlugins: [
-			[rehypeKatex, { output: "html" }],
+			[rehypeKatex, {
+				output: "htmlAndMathml",
+				trust: true,
+				minRuleThickness: 0.06,
+				throwOnError: false,
+				macros: {
+					"\\R": "\\mathbb{R}",
+					"\\N": "\\mathbb{N}",
+					"\\Z": "\\mathbb{Z}",
+					"\\Q": "\\mathbb{Q}",
+					"\\C": "\\mathbb{C}",
+					"\\F": "\\mathbb{F}",
+					"\\E": "\\mathbb{E}",
+					"\\eps": "\\varepsilon",
+					"\\abs": "\\left|#1\\right|",
+					"\\set": "\\left\\{#1\\right\\}",
+					"\\paren": "\\left(#1\\right)",
+					"\\brac": "\\left[#1\\right]",
+				},
+			}],
 			rehypeSlug,
 			[
 				rehypeComponents,

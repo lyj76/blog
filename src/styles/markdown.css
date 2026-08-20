@@ -250,22 +250,58 @@
         background-color: color-mix(in oklab, oklch(0.65 0.22 25) 8%, transparent) !important;
     }
 
+    /* ——— KaTeX 渲染优化 ——— */
+
+    /* 基础字号：默认 1.21em 略大，调至 1.1em 改善行内公式与正文的和谐度 */
+    .katex {
+        font-size: 1.1em;
+    }
+
+    /* 行内公式垂直对齐微调，避免上下标顶到行框 */
+    .katex:not(.katex-display) {
+        line-height: 1;
+    }
+
     .katex-display-container,
     .katex-display {
         max-width: 100%;
         overflow-x: auto;
+        overflow-y: hidden;
         margin: 1.1rem 0 !important;
         padding: 0.15rem 0 !important;
         text-align: center;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
+
+        /* 继承主题色（暗色模式下公式颜色自动跟随） */
+        color: inherit;
     }
-    
+
     /* 连续多行独立公式紧凑排版：避免多行公式之间产生 44px 的离谱推开距离 */
     .katex-display + .katex-display,
     .katex-display-container + .katex-display-container,
     p:has(> .katex-display) + p:has(> .katex-display) {
         margin-top: -0.45rem !important;
+    }
+
+    /* 行内公式与周围文本的间距 */
+    .katex:not(.katex-display) {
+        padding: 0 0.05em;
+    }
+
+    /* 分数线/根号线在屏幕上的最小厚度（配合 minRuleThickness: 0.06 使用） */
+    .katex .frac-line,
+    .katex .overline-line,
+    .katex .underline-line,
+    .katex .hline,
+    .katex .hdashline,
+    .katex .sqrt-line {
+        min-height: 1.15px;
+    }
+
+    /* 上下标位置微调：改善视觉层次 */
+    .katex .msupsub {
+        text-align: left;
     }
 }
