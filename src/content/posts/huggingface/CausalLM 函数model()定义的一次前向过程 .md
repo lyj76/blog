@@ -1,30 +1,29 @@
 ---
-title: CausalLM 前向契约：model() 返回什么
+title: CausalLM 函数model()定义的一次前向过程 
 published: 2026-08-05
 description: forward 参数契约（关键字调用陷阱）、CausalLMOutputWithPast 字段表、labels 触发内部交叉熵的完整流程（logits 对齐 → 展平 → ignore_index 求平均）、shift 一位的位置对齐机制（位置 n 预测 n+1，末位输出丢弃）、-100 在 SFT 里的掩码用法、logits[batch, seq, vocab] 作为 seq 个并列分类任务的视角、train/eval、**inputs 解包
 tags: [HuggingFace, transformers, CausalLM, 前向传播, loss]
 category: HuggingFace
 ---
 
-# CausalLM 前向契约：model() 返回什么
+# CausalLM 函数model()定义的一次前向过程 
 
-调用 `model(input_ids=..., labels=...)` 后，返回的不是张量，而是一个带多个字段的数据包。理解这个数据包的契约，才能知道「loss 从哪来、logits 长什么样、什么时候有 past_key_values」。这篇按 forward 的执行顺序展开：参数进来 → 内部算 loss → 返回字段 → 模式切换。
-
+调用 `model(input_ids=..., labels=...)` 一次前向传播后，返回的不是张量，而是一个带多个字段的数据包。
 > 归属：**`transformers` 库**（`from transformers import AutoModelForCausalLM`）——HF 的模型库。
 
-## 1. forward 的参数契约：input_ids / attention_mask / labels
+## 1. model()中forward一次前向的输入参数 
 
-`forward` 是模型接收输入、产出输出的契约边界。所有 HF CausalLM 模型遵循同一签名，关键参数就这几个：
+所有 HF CausalLM 模型遵循同一签名，关键参数如下：
 
 | 参数 | 含义 | 形状 | 训练时传？ |
 | --- | --- | --- | --- |
 | `input_ids` | 输入 token 序列 | `[batch, seq]` | 必传 |
-| `attention_mask` | 标记真实 / 填充位（1=真实，0=填充） | `[batch, seq]` | 通常传 |
-| `position_ids` | 每个位置的下标编号 | `[batch, seq]` | 少用（默认自动生成） |
-| `past_key_values` | 历史 KV 缓存（生成加速用） | 元组 | 生成时用 |
-| `labels` | 目标 token 序列（标准答案） | `[batch, seq]` | **训练时传** |
+| `attention_mask` | 01的填充位。$M=-\infty$使得查询权重pad位$softmax (\frac{QK^T}{\sqrt{d}}+M)=0$，则其他向量都不会加入这个向量意义 | `[batch, seq]` | 通常传 |
+| `position_ids` | 每个位置的下标编号 | `[batch, seq]` | 少用（默认 |
+| `past_key_values` | 历史 KV 缓存（生成加速，在generate中才有意义） | 元组 | 生成时用 |
+| `labels` | 目标 token 大小和输入完全一样。通过label向左移位来对齐输入计算loss。比如input[0]对应label[1]；inpput[0:1]对应label[2] | `[batch, seq]` | **训练时传** |
 
-`input_ids` 是 tokenizer 产出的 token id 序列（来源见 [[tokenizer-类型契约]]），`attention_mask` 标记真实 / padding 位，两者通常成对出现。`labels` 是训练专属——传了它模型才会算 loss（第 3 节展开）。
+`input_ids` 是 tokenizer 产出的 token id 序列（来源见 [[tokenizer-类型契约]]）
 
 ::::warning
 **为什么必须用关键字参数调用**：`forward` 参数多、顺序固定——`labels` 排在第六位，第二位是 `attention_mask`。写 `model(input_ids, labels)` 位置调用会把 labels 错塞给 `attention_mask`，**不报错但行为完全错误**。HF 生态永远写 `model(input_ids=..., labels=...)`（参数语法见 [[函数参数与解包]]）。
